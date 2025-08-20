@@ -11,9 +11,9 @@ const orbitron = Orbitron({
 })
 
 export const metadata: Metadata = {
-  title: "Watch Live App",
-  description: "Watch live streams from Twitch, YouTube, and Kick, world clock, sleep calculator, timer, stopwatch, and more.",
-
+  title: "ساعت جهانی",
+  description: "یک برنامه زیبای ساعت جهانی",
+  generator: "v0.app",
 }
 
 export default function RootLayout({
@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={orbitron.variable}>
+    <html lang="fa" dir="rtl" className={orbitron.variable}>
       <head>
         <style>{`
 html {

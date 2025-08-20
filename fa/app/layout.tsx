@@ -11,9 +11,9 @@ const orbitron = Orbitron({
 })
 
 export const metadata: Metadata = {
-  title: "Watch Live App",
-  description: "Watch live streams from Twitch, YouTube, and Kick, world clock, sleep calculator, timer, stopwatch, and more.",
-
+  title: "v0 App",
+  description: "Created with v0",
+  generator: "v0.app",
 }
 
 export default function RootLayout({

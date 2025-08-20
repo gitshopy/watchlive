@@ -18,6 +18,13 @@ import {
   RotateCcw,
   Plus,
   Minus,
+  Bed,
+  Disc3,
+  History,
+  Trash2,
+  Radio,
+  Eye,
+  ExternalLink,
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
@@ -54,6 +61,19 @@ interface GradientSettings {
   direction: number
   type: "linear" | "radial"
   intensity: number
+}
+
+interface LiveStream {
+  id: string
+  title: string
+  streamer: string
+  platform: 'twitch' | 'youtube' | 'kick'
+  category: string
+  viewers: number
+  thumbnail: string
+  url: string
+  startedAt: string
+  isLive: boolean
 }
 
 export default function Home() {
@@ -128,10 +148,7 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(new Date())
 
   const [isDayMode, setIsDayMode] = useState(true)
-
-  const [fullscreenClock, setFullscreenClock] = useState<string | null>(null)
-
-  const [clockMode, setClockMode] = useState<"world" | "alarm" | "timer" | "stopwatch">("world")
+  const [clockMode, setClockMode] = useState<"world" | "alarm" | "timer" | "stopwatch" | "sleep" | "wheel" | "live">("world")
 
   // Alarm state
   const [alarms, setAlarms] = useState<
@@ -157,6 +174,37 @@ export default function Home() {
   const [stopwatchRunning, setStopwatchRunning] = useState(false)
   const [stopwatchLaps, setStopwatchLaps] = useState<number[]>([])
 
+  // Sleep Calculator state
+  const [sleepMode, setSleepMode] = useState<"bedtime" | "wakeup">("bedtime")
+  const [wakeUpTime, setWakeUpTime] = useState("07:00")
+  const [bedTime, setBedTime] = useState("23:00")
+  const [sleepDuration, setSleepDuration] = useState(8) // hours
+  const [sleepResults, setSleepResults] = useState<{
+    bedtimes: string[]
+    wakeupTimes: string[]
+    cycles: number
+  } | null>(null)
+
+  // Wheel of Names state
+  const [wheelNames, setWheelNames] = useState<string[]>(["Ali", "Charles", "Diya", "Eric", "Fatima", "Gabriel", "Hanna"])
+  const [newName, setNewName] = useState("")
+  const [isSpinning, setIsSpinning] = useState(false)
+  const [selectedName, setSelectedName] = useState<string | null>(null)
+  const [spinRotation, setSpinRotation] = useState(0)
+  const [wheelHistory, setWheelHistory] = useState<Array<{name: string, timestamp: Date}>>([])
+  const [showWheelHistory, setShowWheelHistory] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Live streams state
+  const [liveStreams, setLiveStreams] = useState<LiveStream[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<string>("crypto")
+  const [isLoadingStreams, setIsLoadingStreams] = useState(false)
+  const [streamsError, setStreamsError] = useState<string | null>(null)
+  const [selectedStream, setSelectedStream] = useState<LiveStream | null>(null)
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<"grid" | "multi">("grid")
+  const [selectedStreams, setSelectedStreams] = useState<LiveStream[]>([])
+
   useEffect(() => {
     const timer = setInterval(
       () => {
@@ -178,12 +226,212 @@ export default function Home() {
         if (stopwatchRunning) {
           setStopwatchTime((prev) => prev + 10)
         }
+
+        // Check alarms
+        checkAlarms()
       },
       timerRunning ? 1000 : stopwatchRunning ? 10 : 1000,
     )
 
     return () => clearInterval(timer)
   }, [timerRunning, timerTimeLeft, stopwatchRunning])
+
+  // Check if any alarms should go off
+  const checkAlarms = () => {
+    const now = new Date()
+    const currentTimeString = now.toTimeString().slice(0, 5)
+    
+    alarms.forEach((alarm) => {
+      if (alarm.enabled && alarm.time === currentTimeString) {
+        triggerAlarm(alarm)
+      }
+    })
+  }
+
+  // Trigger alarm with sound and notification
+  const triggerAlarm = (alarm: any) => {
+    // Show notification
+    toast({ 
+      title: "Alarm!", 
+      description: `Time to wake up! ${alarm.label ? `(${alarm.label})` : ''}`,
+      duration: 10000 // 10 seconds
+    })
+
+    // Play alarm sound
+    playAlarmSound()
+
+    // Show browser notification if permission granted
+    if (Notification.permission === "granted") {
+      new Notification("Alarm!", {
+        body: `Time to wake up! ${alarm.label ? `(${alarm.label})` : ''}`,
+        icon: "/favicon.ico"
+      })
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission()
+    }
+  }
+
+  // Play alarm sound
+  const playAlarmSound = () => {
+    try {
+      // Create audio context for alarm sound
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime)
+      oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1)
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2)
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 3)
+      
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 3)
+    } catch (error) {
+      console.log("Could not play alarm sound:", error)
+    }
+  }
+
+  // Timer functions
+  const startTimer = () => {
+    if (timerMinutes > 0 || timerSeconds > 0) {
+      setTimerTimeLeft(timerMinutes * 60 + timerSeconds)
+      setTimerRunning(true)
+    }
+  }
+
+  const pauseTimer = () => {
+    setTimerRunning(false)
+  }
+
+  const resetTimer = () => {
+    setTimerRunning(false)
+    setTimerTimeLeft(0)
+  }
+
+  // Stopwatch functions
+  const startStopwatch = () => {
+    setStopwatchRunning(true)
+  }
+
+  const pauseStopwatch = () => {
+    setStopwatchRunning(false)
+  }
+
+  const resetStopwatch = () => {
+    setStopwatchRunning(false)
+    setStopwatchTime(0)
+    setStopwatchLaps([])
+  }
+
+  const addLap = () => {
+    setStopwatchLaps((prev) => [...prev, stopwatchTime])
+  }
+
+  const formatStopwatchTime = (milliseconds: number) => {
+    const totalSeconds = Math.floor(milliseconds / 1000)
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    const ms = Math.floor((milliseconds % 1000) / 10)
+    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`
+  }
+
+  const formatTimerTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
+
+  // Sleep Calculator functions
+  const calculateSleepTimes = () => {
+    if (sleepMode === "bedtime") {
+      // Calculate bedtimes based on wake up time
+      const wakeTime = new Date(`2000-01-01 ${wakeUpTime}:00`)
+      const bedtimes = []
+      
+      // Calculate for 4-6 sleep cycles (6-9 hours)
+      for (let cycles = 4; cycles <= 6; cycles++) {
+        const sleepTime = new Date(wakeTime)
+        sleepTime.setMinutes(sleepTime.getMinutes() - (cycles * 90 + 15)) // 90 min per cycle + 15 min to fall asleep
+        
+        const timeStr = sleepTime.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        })
+        bedtimes.push(`${timeStr} (${cycles} cycles - ${cycles * 1.5}h sleep)`)
+      }
+      
+      setSleepResults({ bedtimes, wakeupTimes: [], cycles: 0 })
+    } else {
+      // Calculate wake up times based on bedtime
+      const bedTimeDate = new Date(`2000-01-01 ${bedTime}:00`)
+      const wakeupTimes = []
+      
+      // Calculate for 4-6 sleep cycles
+      for (let cycles = 4; cycles <= 6; cycles++) {
+        const wakeTime = new Date(bedTimeDate)
+        wakeTime.setMinutes(wakeTime.getMinutes() + (cycles * 90 + 15)) // 90 min per cycle + 15 min to fall asleep
+        
+        // Handle next day
+        if (wakeTime.getDate() !== bedTimeDate.getDate()) {
+          wakeTime.setDate(wakeTime.getDate() + 1)
+        }
+        
+        const timeStr = wakeTime.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        })
+        wakeupTimes.push(`${timeStr} (${cycles} cycles - ${cycles * 1.5}h sleep)`)
+      }
+      
+      setSleepResults({ bedtimes: [], wakeupTimes, cycles: 0 })
+    }
+  }
+
+  // Wheel functions
+  const addName = () => {
+    if (newName.trim() && !wheelNames.includes(newName.trim())) {
+      setWheelNames([...wheelNames, newName.trim()])
+      setNewName("")
+    }
+  }
+
+  const removeName = (nameToRemove: string) => {
+    setWheelNames(wheelNames.filter(name => name !== nameToRemove))
+  }
+
+  const spinWheel = () => {
+    if (isSpinning || wheelNames.length === 0) return
+    
+    setIsSpinning(true)
+    setSelectedName(null)
+    
+    // Generate random rotation (multiple full rotations + random final position)
+    const randomRotation = 1440 + Math.random() * 1440 // 4-8 full rotations
+    setSpinRotation(prev => prev + randomRotation)
+    
+    setTimeout(() => {
+      // Calculate which name was selected
+      const segmentAngle = 360 / wheelNames.length
+      const finalAngle = (spinRotation + randomRotation) % 360
+      const selectedIndex = Math.floor((360 - finalAngle) / segmentAngle) % wheelNames.length
+      const selected = wheelNames[selectedIndex]
+      
+      setSelectedName(selected)
+      setWheelHistory(prev => [{ name: selected, timestamp: new Date() }, ...prev.slice(0, 9)]) // Keep only last 10
+      setIsSpinning(false)
+    }, 3000)
+  }
+
+  const clearHistory = () => {
+    setWheelHistory([])
+  }
 
   const timezoneOptions = [
     { name: "New York", timezone: "America/New_York", abbreviation: "EST" },
@@ -652,27 +900,23 @@ export default function Home() {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false)
 
   const availableTimezones = [
-    { name: "New York", timezone: "America/New_York", abbreviation: "EST" },
-    { name: "Los Angeles", timezone: "America/Los_Angeles", abbreviation: "PST" },
-    { name: "Chicago", timezone: "America/Chicago", abbreviation: "CST" },
-    { name: "London", timezone: "Europe/London", abbreviation: "GMT" },
-    { name: "Paris", timezone: "Europe/Paris", abbreviation: "CET" },
-    { name: "Berlin", timezone: "Europe/Berlin", abbreviation: "CET" },
-    { name: "Tokyo", timezone: "Asia/Tokyo", abbreviation: "JST" },
-    { name: "Sydney", timezone: "Australia/Sydney", abbreviation: "AEDT" },
-    { name: "Dubai", timezone: "Asia/Dubai", abbreviation: "GST" },
-    { name: "Mumbai", timezone: "Asia/Kolkata", abbreviation: "IST" },
+    { name: "New York", value: "America/New_York" },
+    { name: "London", value: "Europe/London" },
+    { name: "Tokyo", value: "Asia/Tokyo" },
+    { name: "Sydney", value: "Australia/Sydney" },
+    { name: "Paris", value: "Europe/Paris" },
+    { name: "Berlin", value: "Europe/Berlin" },
+    { name: "Moscow", value: "Europe/Moscow" },
+    { name: "Dubai", value: "Asia/Dubai" },
+    { name: "Singapore", value: "Asia/Singapore" },
+    { name: "Los Angeles", value: "America/Los_Angeles" }
   ]
 
-  const toggleTimezone = (timezone: (typeof availableTimezones)[0]) => {
-    setWorldClockSettings((prev) => ({
-      ...prev,
-      selectedTimezones: prev.selectedTimezones.some((tz) => tz.timezone === timezone.timezone)
-        ? prev.selectedTimezones.filter((tz) => tz.timezone !== timezone.timezone)
-        : [...prev.selectedTimezones, timezone],
-    }))
+  const toggleTheme = () => {
+    setIsDayMode(!isDayMode)
   }
 
+  // Add missing alarm functions
   const addAlarm = () => {
     if (newAlarmTime && newAlarmLabel) {
       const newAlarm = {
@@ -680,9 +924,10 @@ export default function Home() {
         time: newAlarmTime,
         label: newAlarmLabel,
         enabled: true,
-        days: [],
+        days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
       }
       setAlarms((prev) => [...prev, newAlarm])
+      setNewAlarmTime("07:00")
       setNewAlarmLabel("")
       toast({ title: "Alarm added", description: `Alarm set for ${newAlarmTime}` })
     }
@@ -693,743 +938,644 @@ export default function Home() {
   }
 
   const toggleAlarm = (id: string) => {
-    setAlarms((prev) => prev.map((alarm) => (alarm.id === id ? { ...alarm, enabled: !alarm.enabled } : alarm)))
+    setAlarms((prev) => prev.map((alarm) => alarm.id === id ? { ...alarm, enabled: !alarm.enabled } : alarm))
   }
 
-  const startTimer = () => {
-    const totalSeconds = timerMinutes * 60 + timerSeconds
-    if (totalSeconds > 0) {
-      setTimerTimeLeft(totalSeconds)
-      setTimerRunning(true)
+  // Fetch live streams by category
+  const fetchLiveStreams = async (category: string) => {
+    setIsLoadingStreams(true)
+    setStreamsError(null)
+    
+    try {
+      // Simulate API call - replace with actual API endpoint
+      const response = await fetch(`/api/live?category=${category}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch streams')
+      }
+      
+      const data = await response.json()
+      setLiveStreams(data.streams || [])
+    } catch (error) {
+      console.error('Error fetching streams:', error)
+      setStreamsError('Failed to load live streams')
+      
+      // Fallback mock data for demonstration
+      const mockStreams = generateMockStreams(category)
+      setLiveStreams(mockStreams)
+    } finally {
+      setIsLoadingStreams(false)
     }
   }
 
-  const pauseTimer = () => {
-    setTimerRunning(false)
-  }
-
-  const resetTimer = () => {
-    setTimerRunning(false)
-    setTimerTimeLeft(0)
-  }
-
-  const startStopwatch = () => {
-    setStopwatchRunning(true)
-  }
-
-  const pauseStopwatch = () => {
-    setStopwatchRunning(false)
-  }
-
-  const resetStopwatch = () => {
-    setStopwatchRunning(false)
-    setStopwatchTime(0)
-    setStopwatchLaps([])
-  }
-
-  const addLap = () => {
-    setStopwatchLaps((prev) => [...prev, stopwatchTime])
-  }
-
-  const formatStopwatchTime = (milliseconds: number) => {
-    const totalSeconds = Math.floor(milliseconds / 1000)
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    const ms = Math.floor((milliseconds % 1000) / 10)
-    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`
-  }
-
-  const formatTimerTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
-  }
-
-  // Professional clock templates for different user types
-  const professionalTemplates = {
-    crypto: {
-      name: "Crypto Trader",
-      description: "24/7 global markets with high activity overlaps",
-      timezones: [
-        { name: "New York", timezone: "America/New_York", abbreviation: "EST" },
-        { name: "London", timezone: "Europe/London", abbreviation: "GMT" },
-        { name: "Hong Kong", timezone: "Asia/Hong_Kong", abbreviation: "HKT" },
-        { name: "Singapore", timezone: "Asia/Singapore", abbreviation: "SGT" },
-        { name: "Tokyo", timezone: "Asia/Tokyo", abbreviation: "JST" },
+  // Generate mock streams for demonstration
+  const generateMockStreams = (category: string): LiveStream[] => {
+    const platforms: ('twitch' | 'youtube' | 'kick')[] = ['twitch', 'youtube', 'kick']
+    const mockData = {
+      crypto: [
+        { title: "Bitcoin Analysis Live", streamer: "CryptoGuru", viewers: 15420 },
+        { title: "ETH Price Action", streamer: "DeFiMaster", viewers: 8920 },
+        { title: "Altcoin Review", streamer: "CoinTrader", viewers: 5670 },
+        { title: "NFT Market Update", streamer: "NFTCollector", viewers: 4320 },
+        { title: "DeFi Protocols", streamer: "YieldFarmer", viewers: 3450 },
+        { title: "Crypto News Hour", streamer: "CryptoNews", viewers: 6780 }
       ],
-      settings: {
-        style: "digital" as const,
-        showSeconds: true,
-        format24h: true,
-        showDate: true,
-        clockSize: "large" as const,
-        textColor: "#fbbf24",
-        accentColor: "#f59e0b",
-      },
-    },
-    stock: {
-      name: "Stock Trader",
-      description: "Market hours focus with NYSE/NASDAQ timing",
-      timezones: [
-        { name: "New York", timezone: "America/New_York", abbreviation: "EST" },
-        { name: "Toronto", timezone: "America/Toronto", abbreviation: "EST" },
-        { name: "Chicago", timezone: "America/Chicago", abbreviation: "CST" },
-        { name: "Los Angeles", timezone: "America/Los_Angeles", abbreviation: "PST" },
+      stocks: [
+        { title: "Market Open Analysis", streamer: "StockTrader", viewers: 12340 },
+        { title: "S&P 500 Watch", streamer: "MarketGuru", viewers: 9870 },
+        { title: "Tech Stocks Review", streamer: "TechInvestor", viewers: 7650 },
+        { title: "Options Trading", streamer: "OptionsPro", viewers: 5430 },
+        { title: "Dividend Stocks", streamer: "DividendKing", viewers: 4320 },
+        { title: "Market Close", streamer: "ClosingBell", viewers: 8760 }
       ],
-      settings: {
-        style: "digital" as const,
-        showSeconds: false,
-        format24h: false,
-        showDate: true,
-        clockSize: "medium" as const,
-        textColor: "#10b981",
-        accentColor: "#059669",
-      },
-    },
-    sales: {
-      name: "Cold Caller",
-      description: "Optimal calling times across business zones",
-      timezones: [
-        { name: "New York", timezone: "America/New_York", abbreviation: "EST" },
-        { name: "Chicago", timezone: "America/Chicago", abbreviation: "CST" },
-        { name: "Denver", timezone: "America/Denver", abbreviation: "MST" },
-        { name: "Los Angeles", timezone: "America/Los_Angeles", abbreviation: "PST" },
-        { name: "London", timezone: "Europe/London", abbreviation: "GMT" },
+      gaming: [
+        { title: "Valorant Ranked", streamer: "ProGamer", viewers: 45670 },
+        { title: "League of Legends", streamer: "LoLMaster", viewers: 34560 },
+        { title: "Fortnite Battle Royale", streamer: "FortnitePro", viewers: 23450 },
+        { title: "Minecraft Survival", streamer: "BlockBuilder", viewers: 12340 },
+        { title: "CS:GO Tournament", streamer: "CSGOCaster", viewers: 56780 },
+        { title: "Among Us with Friends", streamer: "Imposter", viewers: 9870 }
       ],
-      settings: {
-        style: "digital" as const,
-        showSeconds: false,
-        format24h: false,
-        showDate: true,
-        clockSize: "medium" as const,
-        textColor: "#3b82f6",
-        accentColor: "#2563eb",
-      },
-    },
+      music: [
+        { title: "Piano Concert Live", streamer: "PianoMaster", viewers: 2340 },
+        { title: "Guitar Lessons", streamer: "GuitarTeacher", viewers: 1870 },
+        { title: "Jazz Improvisation", streamer: "JazzArtist", viewers: 1230 },
+        { title: "Classical Music", streamer: "ClassicalPro", viewers: 980 },
+        { title: "Rock Band Practice", streamer: "RockBand", viewers: 3450 },
+        { title: "Electronic Music", streamer: "EDMProducer", viewers: 5670 }
+      ],
+      news: [
+        { title: "Breaking News", streamer: "NewsAnchor", viewers: 45670 },
+        { title: "Political Analysis", streamer: "PoliticsPro", viewers: 23450 },
+        { title: "Tech News Update", streamer: "TechReporter", viewers: 18760 },
+        { title: "Sports Highlights", streamer: "SportsCaster", viewers: 34560 },
+        { title: "Weather Report", streamer: "WeatherMan", viewers: 12340 },
+        { title: "Business News", streamer: "BusinessReporter", viewers: 29870 }
+      ]
+    }
+
+    const categoryData = mockData[category as keyof typeof mockData] || mockData.crypto
+    
+    return categoryData.map((stream, index) => ({
+      id: `${category}-${index}`,
+      title: stream.title,
+      streamer: stream.streamer,
+      platform: platforms[index % platforms.length],
+      category,
+      viewers: stream.viewers,
+      thumbnail: `https://picsum.photos/320/180?random=${index}`,
+      url: `https://example.com/stream/${stream.streamer.toLowerCase()}`,
+      startedAt: new Date(Date.now() - Math.random() * 3600000).toISOString(),
+      isLive: true
+    }))
   }
 
-  // Function to get activity status for professional templates
-  const getActivityStatus = (timezone: string, templateType: keyof typeof professionalTemplates) => {
+  // Watch live stream
+  const watchLiveStream = (stream: LiveStream) => {
+    setSelectedStream(stream)
+    setIsPlayerOpen(true)
+    
+    toast({
+      title: "Opening Stream",
+      description: `Opening ${stream.title} by ${stream.streamer}`,
+    })
+  }
+
+
+
+  // Close player modal
+  const closePlayer = () => {
+    setIsPlayerOpen(false)
+    setSelectedStream(null)
+  }
+
+  // Get embed URL for different platforms
+  const getEmbedUrl = (stream: LiveStream): string => {
+    try {
+      switch (stream.platform) {
+        case 'twitch':
+          // Twitch embed format: https://player.twitch.tv/?channel=CHANNEL_NAME&parent=YOUR_DOMAIN
+          const twitchChannel = stream.url.split('/').pop() || stream.streamer.toLowerCase()
+          
+          // Get the current domain for Twitch parent parameter
+          // According to Twitch docs: parent must be the exact domain where the embed is hosted
+          const currentDomain = window.location.hostname || 'localhost'
+          
+          // Twitch requires the parent domain to be exact and accessible
+          // For development, we'll use localhost, but this may still fail due to Twitch restrictions
+          return `https://player.twitch.tv/?channel=${twitchChannel}&parent=${currentDomain}&autoplay=true&muted=false`
+        
+        case 'youtube':
+          // YouTube embed format: https://www.youtube.com/embed/VIDEO_ID
+          let videoId = ''
+          
+          // Handle different YouTube URL formats
+          if (stream.url.includes('youtube.com/watch?v=')) {
+            videoId = stream.url.split('v=')[1]?.split('&')[0] || ''
+          } else if (stream.url.includes('youtu.be/')) {
+            videoId = stream.url.split('youtu.be/')[1]?.split('?')[0] || ''
+          } else if (stream.url.includes('youtube.com/embed/')) {
+            videoId = stream.url.split('youtube.com/embed/')[1]?.split('?')[0] || ''
+          }
+          
+          // Validate video ID (should be 11 characters)
+          if (videoId && videoId.length === 11) {
+            return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`
+          } else {
+            console.warn('Invalid YouTube video ID:', videoId)
+            // Fallback to a working demo video
+            return 'https://www.youtube.com/embed/jNQXAC9IVRw?autoplay=1&rel=0&modestbranding=1'
+          }
+        
+        case 'kick':
+          // Kick embed format: https://player.kick.com/CHANNEL_NAME
+          const kickChannel = stream.url.split('/').pop() || stream.streamer.toLowerCase()
+          return `https://player.kick.com/${kickChannel}`
+        
+        default:
+          return stream.url
+      }
+    } catch (error) {
+      console.error('Error generating embed URL:', error)
+      // Fallback to a working demo
+      return 'https://www.youtube.com/embed/jNQXAC9IVRw?autoplay=1&rel=0&modestbranding=1'
+    }
+  }
+
+
+
+  // Handle iframe load error
+  const handleIframeError = (stream: LiveStream) => {
+    if (stream.platform === 'twitch') {
+      toast({
+        title: "Twitch Embed Failed",
+        description: "Twitch requires domain verification. This is common in development. Use the 'Watch on Twitch' button instead.",
+        variant: "destructive",
+        duration: 10000,
+      })
+      
+      // Log detailed error for debugging
+      console.warn('Twitch embed failed. This is likely due to:', {
+        reason: 'Domain verification required by Twitch',
+        currentDomain: window.location.hostname,
+        streamUrl: stream.url,
+        embedUrl: getEmbedUrl(stream),
+        solution: 'Use production domain or watch directly on Twitch'
+      })
+    } else {
+      toast({
+        title: "Embedding Failed",
+        description: `Could not load ${stream.platform} stream. Opening in new tab instead.`,
+        variant: "destructive",
+      })
+    }
+    
+    // Don't automatically close player for Twitch - let user choose
+    if (stream.platform !== 'twitch') {
+      window.open(stream.url, '_blank')
+      closePlayer()
+    }
+  }
+
+  // Handle iframe load success
+  const handleIframeLoad = (stream: LiveStream) => {
+    // Hide loading indicator when iframe loads
+    const loadingIndicator = document.querySelector('.loading-indicator')
+    if (loadingIndicator) {
+      loadingIndicator.classList.add('opacity-0')
+      setTimeout(() => loadingIndicator.remove(), 300)
+    }
+    
+    // Log successful load
+    console.log(`Successfully loaded ${stream.platform} stream:`, stream.title)
+  }
+
+  // Auto-pick random stream from category
+  const autoPickStream = () => {
+    if (liveStreams.length === 0) return
+    
+    const randomIndex = Math.floor(Math.random() * liveStreams.length)
+    const randomStream = liveStreams[randomIndex]
+    watchLiveStream(randomStream)
+  }
+
+  // Format viewer count
+  const formatViewers = (viewers: number): string => {
+    if (viewers >= 1000000) {
+      return `${(viewers / 1000000).toFixed(1)}M`
+    } else if (viewers >= 1000) {
+      return `${(viewers / 1000).toFixed(1)}K`
+    }
+    return viewers.toString()
+  }
+
+  // Format stream duration
+  const formatStreamDuration = (startedAt: string): string => {
+    const start = new Date(startedAt)
     const now = new Date()
-    const timeInZone = new Date(now.toLocaleString("en-US", { timeZone: timezone }))
-    const hour = timeInZone.getHours()
-    const day = timeInZone.getDay() // 0 = Sunday, 1 = Monday, etc.
-
-    if (templateType === "crypto") {
-      // High activity during market overlaps
-      if ((hour >= 8 && hour <= 11) || (hour >= 19 && hour <= 23)) {
-        return { status: "High Activity", color: "#f59e0b" }
-      }
-      return { status: "Active", color: "#10b981" }
+    const diff = now.getTime() - start.getTime()
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`
     }
-
-    if (templateType === "stock") {
-      // Market hours 9:30 AM - 4:00 PM EST
-      if (timezone === "America/New_York") {
-        if (day >= 1 && day <= 5) {
-          // Monday to Friday
-          if (hour === 9 && timeInZone.getMinutes() >= 30) {
-            return { status: "Market Open", color: "#10b981" }
-          }
-          if (hour >= 10 && hour <= 15) {
-            return { status: "Market Open", color: "#10b981" }
-          }
-          if (hour === 16 && timeInZone.getMinutes() === 0) {
-            return { status: "Market Close", color: "#ef4444" }
-          }
-        }
-        return { status: "Market Closed", color: "#6b7280" }
-      }
-      return { status: "Follow NYSE", color: "#6b7280" }
-    }
-
-    if (templateType === "sales") {
-      // Best calling times: Tue-Thu, 10-11:30 AM and 2-4 PM
-      if (day >= 2 && day <= 4) {
-        // Tuesday to Thursday
-        if ((hour >= 10 && hour <= 11) || (hour >= 14 && hour <= 16)) {
-          return { status: "Prime Time", color: "#3b82f6" }
-        }
-      }
-      if (day >= 1 && day <= 5 && hour >= 9 && hour <= 17) {
-        return { status: "Business Hours", color: "#10b981" }
-      }
-      return { status: "Off Hours", color: "#6b7280" }
-    }
-
-    return { status: "Active", color: "#6b7280" }
+    return `${minutes}m`
   }
 
-  // Function to apply professional template
-  const applyProfessionalTemplate = (templateKey: keyof typeof professionalTemplates) => {
-    const template = professionalTemplates[templateKey]
-    setWorldClockSettings((prev) => ({
-      ...prev,
-      ...template.settings,
-      selectedTimezones: template.timezones,
-    }))
+  // Get platform icon and color
+  const getPlatformInfo = (platform: string) => {
+    switch (platform) {
+      case 'twitch':
+        return { icon: '🎮', color: 'text-purple-400', bg: 'bg-purple-500/20' }
+      case 'youtube':
+        return { icon: '📺', color: 'text-red-400', bg: 'bg-red-500/20' }
+      case 'kick':
+        return { icon: '⚡', color: 'text-green-400', bg: 'bg-green-500/20' }
+      default:
+        return { icon: '📡', color: 'text-blue-400', bg: 'bg-blue-500/20' }
+    }
   }
 
-  const [clockStyle, setClockStyle] = useState(worldClockSettings.style)
-  const [clockSize, setClockSize] = useState(worldClockSettings.clockSize)
-  const [showSeconds, setShowSeconds] = useState(worldClockSettings.showSeconds)
-  const [showDate, setShowDate] = useState(worldClockSettings.showDate)
-
+  // Fetch streams when category changes
   useEffect(() => {
-    setWorldClockSettings((prev) => ({
-      ...prev,
-      style: clockStyle,
-      clockSize: clockSize,
-      showSeconds: showSeconds,
-      showDate: showDate,
-    }))
-  }, [clockStyle, clockSize, showSeconds, showDate])
+    if (clockMode === "live") {
+      fetchLiveStreams(selectedCategory)
+    }
+  }, [selectedCategory, clockMode])
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isPlayerOpen) {
+        closePlayer()
+      }
+    }
+
+    if (isPlayerOpen) {
+      document.addEventListener('keydown', handleKeyDown)
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden'
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'unset'
+    }
+  }, [isPlayerOpen])
+
+  // Add stream to multi-view
+  const addToMultiView = (stream: LiveStream) => {
+    if (selectedStreams.length >= 4) {
+      toast({
+        title: "Multi-view Full",
+        description: "Maximum 4 streams allowed in multi-view mode.",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    if (selectedStreams.find(s => s.id === stream.id)) {
+      toast({
+        title: "Stream Already Added",
+        description: "This stream is already in multi-view mode.",
+      })
+      return
+    }
+    
+    setSelectedStreams(prev => [...prev, stream])
+    toast({
+      title: "Added to Multi-view",
+      description: `${stream.title} added to multi-view mode.`,
+    })
+  }
+
+  // Remove stream from multi-view
+  const removeFromMultiView = (streamId: string) => {
+    setSelectedStreams(prev => prev.filter(s => s.id !== streamId))
+  }
+
+  // Clear all streams from multi-view
+  const clearMultiView = () => {
+    setSelectedStreams([])
+  }
 
   return (
-    <div
-      className="min-h-screen bg-cover bg-center bg-no-repeat p-4 relative transition-colors duration-500"
-      style={{
-        backgroundColor: themeStyles.backgroundColor,
-      }}
-    >
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-500"
-        style={{
-          backgroundImage: backgroundSettings.imageUrl ? `url(${backgroundSettings.imageUrl})` : "none",
-          opacity: backgroundSettings.opacity,
-          filter: backgroundSettings.blur > 0 ? `blur(${backgroundSettings.blur}px)` : "none",
-        }}
-      />
-
-      {/* Top Controls */}
-      <div className="relative z-30 flex justify-between items-center mb-8">
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => setClockMode("world")}
-            className={`${clockMode === "world" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-          >
-            <Clock className="w-4 h-4 mr-2" />
-            World Clock
-          </Button>
-          <Button
-            onClick={() => setClockMode("alarm")}
-            className={`${clockMode === "alarm" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-          >
-            <AlarmClock className="w-4 h-4 mr-2" />
-            Alarm
-          </Button>
-          <Button
-            onClick={() => setClockMode("timer")}
-            className={`${clockMode === "timer" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-          >
-            <Timer className="w-4 h-4 mr-2" />
-            Timer
-          </Button>
-          <Button
-            onClick={() => setClockMode("stopwatch")}
-            className={`${clockMode === "stopwatch" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-          >
-            <Stopwatch className="w-4 h-4 mr-2" />
-            Stopwatch
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-4">
-          {clockMode === "world" && (
+    <div className={`min-h-screen flex flex-col ${isDayMode ? 'bg-gradient-to-br from-blue-50 to-blue-100' : 'bg-gradient-to-br from-gray-900 to-gray-800'}`}>
+      <div className="container mx-auto px-4 py-8 flex-grow">
+        {/* Top Controls */}
+        <div className="relative z-30 flex justify-between items-center mb-8">
+          <div className="flex items-center gap-2">
             <Button
-              onClick={() => setLeftSidebarOpen(true)}
-              className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+              onClick={() => setClockMode("world")}
+              className={`${clockMode === "world" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
             >
               <Clock className="w-4 h-4 mr-2" />
-              Timezones
+              World Clock
             </Button>
-          )}
-
-          <Button
-            onClick={() => setIsDayMode(!isDayMode)}
-            className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-          >
-            {isDayMode ? <Moon className="w-4 h-4 mr-2" /> : <Sun className="w-4 h-4 mr-2" />}
-            {isDayMode ? "Night" : "Day"}
-          </Button>
-
-          <Button
-            onClick={() => setSidebarOpen(true)}
-            className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            Settings
-          </Button>
-        </div>
-      </div>
-
-      {/* Left Timezones Sidebar */}
-      <div
-        className={`fixed top-0 left-0 h-full w-80 ${themeStyles.sidebarBackground} backdrop-blur-xl border-r ${themeStyles.sidebarBorder} transform transition-transform duration-300 ease-in-out z-40 ${
-          leftSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="p-6 h-full overflow-y-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className={`text-xl font-bold ${themeStyles.textColor}`}>Timezones</h2>
             <Button
-              onClick={() => setLeftSidebarOpen(false)}
-              className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+              onClick={() => setClockMode("alarm")}
+              className={`${clockMode === "alarm" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
             >
-              <X className="w-4 h-4" />
+              <AlarmClock className="w-4 h-4 mr-2" />
+              Alarm
+            </Button>
+            <Button
+              onClick={() => setClockMode("timer")}
+              className={`${clockMode === "timer" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+            >
+              <Timer className="w-4 h-4 mr-2" />
+              Timer
+            </Button>
+            <Button
+              onClick={() => setClockMode("stopwatch")}
+              className={`${clockMode === "stopwatch" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+            >
+              <Stopwatch className="w-4 h-4 mr-2" />
+              Stopwatch
+            </Button>
+            <Button
+              onClick={() => setClockMode("sleep")}
+              className={`${clockMode === "sleep" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+            >
+              <Bed className="w-4 h-4 mr-2" />
+              Sleep Calculator
+            </Button>
+            <Button
+              onClick={() => setClockMode("wheel")}
+              className={`${clockMode === "wheel" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+            >
+              <Disc3 className="w-4 h-4 mr-2" />
+              Wheel
+            </Button>
+            <Button
+              onClick={() => setClockMode("live")}
+              className={`${clockMode === "live" ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+            >
+              <Radio className="w-4 h-4 mr-2" />
+              Live Streams
             </Button>
           </div>
 
-          <div className="space-y-4">
-            {timezoneOptions.map((timezone) => (
-              <div key={timezone.timezone} className="flex items-center gap-4">
-                <input
-                  type="checkbox"
-                  checked={worldClockSettings.selectedTimezones.some((tz) => tz.timezone === timezone.timezone)}
-                  onChange={() => toggleTimezone(timezone)}
-                  className="rounded"
-                />
-                <div>
-                  <div className={`font-bold ${themeStyles.textColor}`}>{timezone.name}</div>
-                  <div className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"}`}>
-                    {timezone.abbreviation}
+          <div className="flex items-center gap-4">
+            {clockMode === "world" && (
+              <Button
+                onClick={() => setLeftSidebarOpen(true)}
+                className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+              >
+                <Clock className="w-4 h-4 mr-2" />
+                Timezones
+              </Button>
+            )}
+
+            <Button
+              onClick={() => setSettingsOpen(true)}
+              className={`p-2 rounded-full ${themeStyles.buttonBackground} transition-all duration-300`}
+              aria-label="Open settings"
+            >
+              <Settings className="w-5 h-5" />
+            </Button>
+
+            <Button
+              onClick={toggleTheme}
+              className={`p-2 rounded-full ${themeStyles.buttonBackground} transition-all duration-300`}
+              aria-label="Toggle dark mode"
+            >
+              {isDayMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+            </Button>
+            
+          </div>
+        </div>
+
+        {/* World Clock Component */}
+        {clockMode === "world" && (
+          <div className="max-w-4xl mx-auto w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Current Time */}
+              <div className="p-6" style={getGlassStyle()}>
+                <div className="text-center">
+                  <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>Current Time</h3>
+                  <div className={`text-4xl font-mono font-bold ${themeStyles.textColor}`}>
+                    {currentTime.toLocaleTimeString()}
+                  </div>
+                  <div className={`text-sm ${themeStyles.textColor} opacity-70 mt-2`}>
+                    {currentTime.toLocaleDateString()}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {/* Right Settings Sidebar */}
-      <div
-        className={`fixed top-0 right-0 h-full w-80 ${themeStyles.sidebarBackground} backdrop-blur-xl border-l ${themeStyles.sidebarBorder} transform transition-transform duration-300 ease-in-out z-40 ${
-          sidebarOpen ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
-        <div className="p-6 h-full overflow-y-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className={`text-xl font-bold ${themeStyles.textColor}`}>Settings</h2>
-            <Button
-              onClick={() => setSidebarOpen(false)}
-              className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
+              {/* Local Timezone */}
+              <div className="p-6" style={getGlassStyle()}>
+                <div className="text-center">
+                  <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>Local Time</h3>
+                  <div className={`text-4xl font-mono font-bold ${themeStyles.textColor}`}>
+                    {currentTime.toLocaleTimeString()}
+                  </div>
+                  <div className={`text-sm ${themeStyles.textColor} opacity-70 mt-2`}>
+                    {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                  </div>
+                </div>
+              </div>
 
-          {clockMode === "world" && (
-            <div className="space-y-4 mt-8">
-              <h3 className={`text-lg font-semibold ${themeStyles.textColor}`}>Professional Templates</h3>
-              <div className="space-y-3">
-                {Object.entries(professionalTemplates).map(([key, template]) => (
-                  <div key={key} className="space-y-2">
-                    <button
-                      onClick={() => applyProfessionalTemplate(key as keyof typeof professionalTemplates)}
-                      className={`w-full p-3 rounded-lg text-left transition-all ${themeStyles.buttonBackground} ${themeStyles.textColor} hover:scale-105`}
-                      style={getGlassStyle()}
-                    >
-                      <div className="font-semibold">{template.name}</div>
-                      <div className="text-sm opacity-75">{template.description}</div>
-                      <div className="text-xs mt-1 opacity-60">
-                        {template.timezones.length} timezones • {template.settings.style} style
-                      </div>
-                    </button>
+              {/* UTC Time */}
+              <div className="p-6" style={getGlassStyle()}>
+                <div className="text-center">
+                  <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>UTC Time</h3>
+                  <div className={`text-4xl font-mono font-bold ${themeStyles.textColor}`}>
+                    {currentTime.toUTCString().split(' ')[4]}
+                  </div>
+                  <div className={`text-sm ${themeStyles.textColor} opacity-70 mt-2`}>
+                    Coordinated Universal Time
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Timezone List */}
+            <div className="mt-8 p-6" style={getGlassStyle()}>
+              <h3 className={`text-xl font-semibold mb-4 ${themeStyles.textColor}`}>Popular Timezones</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {availableTimezones.map((tz) => (
+                  <div key={tz.name} className={`p-4 rounded-lg ${themeStyles.buttonBackground} border border-white/10`}>
+                    <div className={`font-semibold ${themeStyles.textColor}`}>{tz.name}</div>
+                    <div className={`text-sm ${themeStyles.textColor} opacity-70`}>
+                      {new Date().toLocaleTimeString('en-US', { timeZone: tz.value })}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
-
-          <div className="space-y-4 mt-8">
-            <h3 className={`text-lg font-semibold ${themeStyles.textColor}`}>Glass Settings</h3>
-            <div className="space-y-4">
-              <div>
-                <label className={`block text-sm font-medium ${themeStyles.textColor} mb-2`}>
-                  Blur: {settings.blur}px
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="50"
-                  value={settings.blur}
-                  onChange={(e) => setSettings({ ...settings, blur: Number(e.target.value) })}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium ${themeStyles.textColor} mb-2`}>
-                  Border Radius: {settings.borderRadius}px
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="50"
-                  value={settings.borderRadius}
-                  onChange={(e) => setSettings({ ...settings, borderRadius: Number(e.target.value) })}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium ${themeStyles.textColor} mb-2`}>
-                  Depth: {settings.depth}px
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="30"
-                  value={settings.depth}
-                  onChange={(e) => setSettings({ ...settings, depth: Number(e.target.value) })}
-                  className="w-full"
-                />
-              </div>
-            </div>
           </div>
-
-          <div className="space-y-4 mt-8">
-            <h3 className={`text-lg font-semibold ${themeStyles.textColor}`}>Color Preview</h3>
-            <div className="space-y-4">
-              <div>
-                <label className={`block text-sm font-medium ${themeStyles.textColor} mb-2`}>Base Color</label>
-                <input
-                  type="color"
-                  value={inputColor}
-                  onChange={(e) => setInputColor(e.target.value)}
-                  className="w-full h-10 rounded border-0"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium ${themeStyles.textColor} mb-2`}>
-                  Opacity: {Math.round(colorSettings.opacity * 100)}%
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={colorSettings.opacity}
-                  onChange={(e) => setColorSettings({ ...colorSettings, opacity: Number(e.target.value) })}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium ${themeStyles.textColor} mb-2`}>
-                  Saturation: {Math.round(colorSettings.saturation * 100)}%
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="0.01"
-                  value={colorSettings.saturation}
-                  onChange={(e) => setColorSettings({ ...colorSettings, saturation: Number(e.target.value) })}
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </div>
-
-          {clockMode === "world" && (
-            <div className="space-y-4 mt-8">
-              <h3 className={`text-lg font-semibold ${themeStyles.textColor}`}>World Clock Settings</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className={`block text-sm font-medium ${themeStyles.textColor} mb-2`}>Clock Style</label>
-                  <select
-                    value={clockStyle}
-                    onChange={(e) => setClockStyle(e.target.value as "digital" | "analog")}
-                    className={`w-full p-2 rounded ${themeStyles.inputBackground} ${themeStyles.textColor} border ${themeStyles.borderColor}`}
-                  >
-                    <option value="digital">Digital</option>
-                    <option value="analog">Analog</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium ${themeStyles.textColor} mb-2`}>Clock Size</label>
-                  <select
-                    value={clockSize}
-                    onChange={(e) => setClockSize(e.target.value as "small" | "medium" | "large" | "extra-large")}
-                    className={`w-full p-2 rounded ${themeStyles.inputBackground} ${themeStyles.textColor} border ${themeStyles.borderColor}`}
-                  >
-                    <option value="small">Small</option>
-                    <option value="medium">Medium</option>
-                    <option value="large">Large</option>
-                    <option value="extra-large">Extra Large</option>
-                  </select>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="show-seconds"
-                    checked={showSeconds}
-                    onChange={(e) => setShowSeconds(e.target.checked)}
-                    className="rounded"
-                  />
-                  <label htmlFor="show-seconds" className={`text-sm ${themeStyles.textColor}`}>
-                    Show Seconds
-                  </label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="show-date"
-                    checked={showDate}
-                    onChange={(e) => setShowDate(e.target.checked)}
-                    className="rounded"
-                  />
-                  <label htmlFor="show-date" className={`text-sm ${themeStyles.textColor}`}>
-                    Show Date
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Additional Settings Content */}
-          {/* ... existing settings content here ... */}
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="relative z-10 flex items-center justify-center min-h-[calc(100vh-120px)]">
-        {clockMode === "world" && (
-          <>
-            {worldClockSettings.selectedTimezones.length === 0 ? (
-              <div className={`text-center ${isDayMode ? themeStyles.textColor + "/60" : "text-gray-300"}`}>
-                <Clock className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-xl mb-2">No timezones selected</p>
-                <p>Click "Timezones" to add some clocks</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 max-w-7xl mx-auto">
-                {worldClockSettings.selectedTimezones.map((timezone) => {
-                  const time = formatTimeForClock(
-                    new Date(),
-                    timezone.timezone,
-                    worldClockSettings.format24h,
-                    worldClockSettings.showSeconds,
-                  )
-
-                  const date = worldClockSettings.showDate ? formatDate(new Date(), timezone.timezone) : ""
-
-                  const currentTemplate = Object.entries(professionalTemplates).find(
-                    ([_, template]) =>
-                      template.timezones.some((tz) => tz.timezone === timezone.timezone) &&
-                      template.settings.textColor === worldClockSettings.textColor,
-                  )
-                  const activityStatus = currentTemplate
-                    ? getActivityStatus(timezone.timezone, currentTemplate[0] as keyof typeof professionalTemplates)
-                    : null
-
-                  const sizeClasses = {
-                    small: "w-48 h-32 text-lg",
-                    medium: "w-64 h-40 text-xl",
-                    large: "w-80 h-48 text-2xl",
-                    xlarge: "w-96 h-56 text-3xl",
-                  }
-
-                  return (
-                    <div
-                      key={timezone.timezone}
-                      className={`${sizeClasses[worldClockSettings.clockSize]} flex flex-col items-center justify-center transition-all duration-300 hover:scale-105 relative group`}
-                      style={getGlassStyle()}
-                    >
-                      <button
-                        onClick={() => setFullscreenClock(timezone.timezone)}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-50 text-white rounded p-1 text-xs hover:bg-opacity-70"
-                      >
-                        ⛶
-                      </button>
-
-                      {activityStatus && (
-                        <div
-                          className="absolute top-2 left-2 px-2 py-1 rounded text-xs font-semibold"
-                          style={{
-                            backgroundColor: activityStatus.color + "20",
-                            color: activityStatus.color,
-                            border: `1px solid ${activityStatus.color}40`,
-                          }}
-                        >
-                          {activityStatus.status}
-                        </div>
-                      )}
-
-                      <div className="text-center">
-                        <h3 className="font-bold mb-2" style={{ color: worldClockSettings.accentColor }}>
-                          {timezone.name}
-                        </h3>
-                        {worldClockSettings.style === "digital" ? (
-                          <>
-                            <div className="font-mono font-bold mb-1" style={{ color: worldClockSettings.textColor }}>
-                              {time}
-                            </div>
-                            {worldClockSettings.showDate && (
-                              <div
-                                className="text-sm font-mono tracking-wider opacity-90"
-                                style={{ color: worldClockSettings.textColor }}
-                              >
-                                {date}
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <AnalogClock timezone={timezone.timezone} size={worldClockSettings.clockSize} />
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </>
         )}
 
+        {/* Alarm Component */}
         {clockMode === "alarm" && (
           <div className="max-w-2xl mx-auto w-full">
-            <div className="mb-8" style={getGlassStyle()}>
-              <div className="p-6">
-                <h2 className={`text-2xl font-bold mb-4 ${themeStyles.textColor}`}>Add New Alarm</h2>
-                <div className="flex gap-4 mb-4">
-                  <input
-                    type="time"
-                    value={newAlarmTime}
-                    onChange={(e) => setNewAlarmTime(e.target.value)}
-                    className={`px-3 py-2 rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder}`}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Alarm label"
-                    value={newAlarmLabel}
-                    onChange={(e) => setNewAlarmLabel(e.target.value)}
-                    className={`flex-1 px-3 py-2 rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder}`}
-                  />
-                  <Button
-                    onClick={addAlarm}
-                    className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-                  >
-                    Add
-                  </Button>
+            <div className="p-6" style={getGlassStyle()}>
+              <div className="text-center mb-6">
+                <AlarmClock className={`w-8 h-8 mx-auto mb-3 ${themeStyles.textColor}`} />
+                <h2 className={`text-3xl font-bold ${themeStyles.textColor}`}>Alarm Clock</h2>
+              </div>
+
+              <div className="space-y-6">
+                {/* Set Alarm */}
+                <div className="text-center">
+                  <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>Set New Alarm</h3>
+                  <div className="flex flex-col gap-4 mb-4">
+                    <input
+                      type="time"
+                      value={newAlarmTime}
+                      onChange={(e) => setNewAlarmTime(e.target.value)}
+                      className={`px-4 py-3 text-2xl font-mono rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder} text-center`}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Alarm label (optional)"
+                      value={newAlarmLabel}
+                      onChange={(e) => setNewAlarmLabel(e.target.value)}
+                      className={`px-4 py-3 rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder} text-center`}
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm ${themeStyles.textColor}`}>Sound:</span>
+                      <select 
+                        className={`px-3 py-2 rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder}`}
+                        defaultValue="beep"
+                      >
+                        <option value="beep">Beep</option>
+                        <option value="chime">Chime</option>
+                        <option value="bell">Bell</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-center">
+                    <Button
+                      onClick={addAlarm}
+                      className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                    >
+                      Set Alarm
+                    </Button>
+                    <Button
+                      onClick={() => triggerAlarm({ time: "Test", label: "Test Alarm" })}
+                      variant="outline"
+                      className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                    >
+                      Test Alarm
+                    </Button>
+                  </div>
                 </div>
+
+                {/* Active Alarms */}
+                {alarms.length > 0 && (
+                  <div>
+                    <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>Active Alarms</h3>
+                    <div className="space-y-2">
+                      {alarms.map((alarm, index) => (
+                        <div key={index} className={`flex items-center justify-between p-3 rounded ${themeStyles.buttonBackground} border border-white/10`}>
+                          <div className="flex flex-col">
+                            <span className={`font-mono ${themeStyles.textColor}`}>{alarm.time}</span>
+                            {alarm.label && (
+                              <span className={`text-sm ${themeStyles.textColor} opacity-70`}>{alarm.label}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => toggleAlarm(alarm.id)}
+                              size="sm"
+                              className={`${alarm.enabled ? 'text-green-400 hover:text-green-300' : 'text-gray-400 hover:text-gray-300'}`}
+                            >
+                              {alarm.enabled ? '✓' : '✗'}
+                            </Button>
+                            <Button
+                              onClick={() => deleteAlarm(alarm.id)}
+                              size="sm"
+                              className="text-red-400 hover:text-red-300"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="space-y-4">
-              {alarms.map((alarm) => (
-                <div key={alarm.id} className="p-4" style={getGlassStyle()}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className={`text-2xl font-mono font-bold ${themeStyles.textColor}`}>{alarm.time}</div>
-                      <div className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"}`}>
-                        {alarm.label}
-                      </div>
+        {/* Timer Component */}
+        {clockMode === "timer" && (
+          <div className="max-w-2xl mx-auto w-full">
+            <div className="p-6" style={getGlassStyle()}>
+              <div className="text-center mb-6">
+                <Timer className={`w-8 h-8 mx-auto mb-3 ${themeStyles.textColor}`} />
+                <h2 className={`text-3xl font-bold ${themeStyles.textColor}`}>Timer</h2>
+              </div>
+
+              <div className="space-y-6">
+                {/* Timer Display */}
+                <div className="text-center">
+                  <div className={`text-6xl font-mono font-bold mb-6 ${themeStyles.textColor}`}>
+                    {formatTimerTime(timerTimeLeft)}
+                  </div>
+                </div>
+
+                {/* Timer Input */}
+                <div className="text-center">
+                  <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>Set Timer</h3>
+                  <div className="flex justify-center items-center gap-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={timerMinutes}
+                        onChange={(e) => setTimerMinutes(parseInt(e.target.value) || 0)}
+                        className={`w-20 px-3 py-2 text-center rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder}`}
+                      />
+                      <span className={`${themeStyles.textColor}`}>min</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
-                        type="checkbox"
-                        checked={alarm.enabled}
-                        onChange={() => toggleAlarm(alarm.id)}
-                        className="rounded"
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={timerSeconds}
+                        onChange={(e) => setTimerSeconds(parseInt(e.target.value) || 0)}
+                        className={`w-20 px-3 py-2 text-center rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder}`}
                       />
-                      <Button
-                        onClick={() => deleteAlarm(alarm.id)}
-                        size="sm"
-                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+                      <span className={`${themeStyles.textColor}`}>sec</span>
                     </div>
                   </div>
                 </div>
-              ))}
-              {alarms.length === 0 && (
-                <div className={`text-center py-8 ${isDayMode ? themeStyles.textColor + "/60" : "text-gray-300"}`}>
-                  <AlarmClock className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p>No alarms set</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
-        {clockMode === "timer" && (
-          <div className="max-w-lg mx-auto w-full text-center">
-            <div className="p-8" style={getGlassStyle()}>
-              <h2 className={`text-2xl font-bold mb-8 ${themeStyles.textColor}`}>Timer</h2>
-
-              {!timerRunning && timerTimeLeft === 0 ? (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        onClick={() => setTimerMinutes(Math.max(0, timerMinutes - 1))}
-                        size="sm"
-                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-                      >
-                        <Minus className="w-4 h-4" />
-                      </Button>
-                      <span className={`text-4xl font-mono font-bold ${themeStyles.textColor} min-w-[3ch]`}>
-                        {timerMinutes.toString().padStart(2, "0")}
-                      </span>
-                      <Button
-                        onClick={() => setTimerMinutes(timerMinutes + 1)}
-                        size="sm"
-                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <span className={`text-4xl font-mono font-bold ${themeStyles.textColor}`}>:</span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        onClick={() => setTimerSeconds(Math.max(0, timerSeconds - 1))}
-                        size="sm"
-                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-                      >
-                        <Minus className="w-4 h-4" />
-                      </Button>
-                      <span className={`text-4xl font-mono font-bold ${themeStyles.textColor} min-w-[3ch]`}>
-                        {timerSeconds.toString().padStart(2, "0")}
-                      </span>
-                      <Button
-                        onClick={() => setTimerSeconds(Math.min(59, timerSeconds + 1))}
-                        size="sm"
-                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
+                {/* Timer Controls */}
+                <div className="flex justify-center gap-4">
                   <Button
                     onClick={startTimer}
-                    className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                    disabled={timerRunning || (timerMinutes === 0 && timerSeconds === 0)}
+                    className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 disabled:opacity-50`}
                   >
                     <Play className="w-4 h-4 mr-2" />
-                    Start Timer
+                    Start
+                  </Button>
+                  <Button
+                    onClick={pauseTimer}
+                    disabled={!timerRunning}
+                    className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 disabled:opacity-50`}
+                  >
+                    <Pause className="w-4 h-4 mr-2" />
+                    Pause
+                  </Button>
+                  <Button
+                    onClick={resetTimer}
+                    className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Reset
                   </Button>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className={`text-6xl font-mono font-bold ${themeStyles.textColor}`}>
-                    {formatTimerTime(timerTimeLeft)}
-                  </div>
-                  <div className="flex justify-center gap-4">
-                    <Button
-                      onClick={timerRunning ? pauseTimer : startTimer}
-                      className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-                    >
-                      {timerRunning ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-                      {timerRunning ? "Pause" : "Resume"}
-                    </Button>
-                    <Button
-                      onClick={resetTimer}
-                      className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-                    >
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Reset
-                    </Button>
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
           </div>
         )}
@@ -1483,29 +1629,993 @@ export default function Home() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Fullscreen Clock Overlay */}
-      {fullscreenClock && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div className="p-8" style={getGlassStyle()}>
-            <h2 className={`text-4xl font-bold mb-4 ${themeStyles.textColor}`}>
-              {formatTimeForClock(
-                new Date(),
-                fullscreenClock,
-                worldClockSettings.format24h,
-                worldClockSettings.showSeconds,
-              )}
-            </h2>
-            <Button
-              onClick={() => setFullscreenClock(null)}
-              className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
-            >
-              Close
-            </Button>
+        {clockMode === "sleep" && (
+          <div className="max-w-2xl mx-auto w-full">
+            <div className="mb-8" style={getGlassStyle()}>
+              <div className="p-6">
+                <div className="flex items-center justify-center mb-6">
+                  <Bed className={`w-8 h-8 mr-3 ${themeStyles.textColor}`} />
+                  <h2 className={`text-3xl font-bold ${themeStyles.textColor}`}>Sleep Calculator</h2>
+                </div>
+                
+                <div className="text-center mb-6">
+                  <p className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"} mb-4`}>
+                    Calculate optimal sleep times based on 90-minute sleep cycles
+                  </p>
+                  
+                  <div className="flex justify-center gap-4 mb-6">
+                    <Button
+                      onClick={() => setSleepMode("bedtime")}
+                      className={`${sleepMode === "bedtime" ? "bg-blue-500/30 border-blue-400/50 text-blue-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                    >
+                      Calculate Bedtime
+                    </Button>
+                    <Button
+                      onClick={() => setSleepMode("wakeup")}
+                      className={`${sleepMode === "wakeup" ? "bg-blue-500/30 border-blue-400/50 text-blue-300" : themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                    >
+                      Calculate Wake-up Time
+                    </Button>
+                  </div>
+                </div>
+
+                {sleepMode === "bedtime" ? (
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <h3 className={`text-xl font-semibold mb-4 ${themeStyles.textColor}`}>
+                        What time do you want to wake up?
+                      </h3>
+                      <div className="flex justify-center items-center gap-4">
+                        <input
+                          type="time"
+                          value={wakeUpTime}
+                          onChange={(e) => setWakeUpTime(e.target.value)}
+                          className={`px-4 py-3 text-2xl font-mono rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder} text-center`}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <Button
+                        onClick={calculateSleepTimes}
+                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 text-lg px-8 py-3`}
+                      >
+                        Calculate Bedtime
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <h3 className={`text-xl font-semibold mb-4 ${themeStyles.textColor}`}>
+                        If you want to go to bed now...
+                      </h3>
+                      <div className="flex justify-center items-center gap-4">
+                        <input
+                          type="time"
+                          value={bedTime}
+                          onChange={(e) => setBedTime(e.target.value)}
+                          className={`px-4 py-3 text-2xl font-mono rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border ${themeStyles.sidebarBorder} text-center`}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <Button
+                        onClick={calculateSleepTimes}
+                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 text-lg px-8 py-3`}
+                      >
+                        Calculate Wake-up Time
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {sleepResults && (
+              <div className="space-y-4">
+                {sleepResults.bedtimes.length > 0 && (
+                  <div className="p-6" style={getGlassStyle()}>
+                    <h3 className={`text-xl font-semibold mb-4 ${themeStyles.textColor} text-center`}>
+                      💤 Recommended Bedtimes
+                    </h3>
+                    <p className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"} mb-4 text-center`}>
+                      To wake up at {wakeUpTime}, you should go to bed at:
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {sleepResults.bedtimes.map((bedtime, index) => (
+                        <div
+                          key={index}
+                          className={`p-4 rounded-lg text-center ${themeStyles.buttonBackground} border ${themeStyles.sidebarBorder}`}
+                        >
+                          <div className={`text-2xl font-mono font-bold ${themeStyles.textColor} mb-1`}>
+                            {bedtime.split(" (")[0]}
+                          </div>
+                          <div className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"}`}>
+                            {bedtime.split(" (")[1]?.replace(")", "")}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {sleepResults.wakeupTimes.length > 0 && (
+                  <div className="p-6" style={getGlassStyle()}>
+                    <h3 className={`text-xl font-semibold mb-4 ${themeStyles.textColor} text-center`}>
+                      ☀️ Recommended Wake-up Times
+                    </h3>
+                    <p className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"} mb-4 text-center`}>
+                      If you go to bed at {bedTime}, you should wake up at:
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {sleepResults.wakeupTimes.map((wakeupTime, index) => (
+                        <div
+                          key={index}
+                          className={`p-4 rounded-lg text-center ${themeStyles.buttonBackground} border ${themeStyles.sidebarBorder}`}
+                        >
+                          <div className={`text-2xl font-mono font-bold ${themeStyles.textColor} mb-1`}>
+                            {wakeupTime.split(" (")[0]}
+                          </div>
+                          <div className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"}`}>
+                            {wakeupTime.split(" (")[1]?.replace(")", "")}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-4" style={getGlassStyle()}>
+                  <div className="text-center">
+                    <h4 className={`text-lg font-semibold mb-2 ${themeStyles.textColor}`}>💡 Sleep Tips</h4>
+                    <div className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"} space-y-1`}>
+                      <p>• Each sleep cycle lasts about 90 minutes</p>
+                      <p>• Waking up at the end of a cycle helps you feel more refreshed</p>
+                      <p>• It typically takes 15 minutes to fall asleep</p>
+                      <p>• Most adults need 4-6 complete sleep cycles (6-9 hours)</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+
+        {clockMode === "wheel" && (
+          <div className="max-w-4xl mx-auto w-full">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Wheel Container */}
+              <div className="lg:col-span-2">
+                <div className="text-center mb-8">
+                  <div className="flex items-center justify-center mb-4">
+                    <Disc3 className={`w-8 h-8 mr-3 ${themeStyles.textColor}`} />
+                    <h2 className={`text-3xl font-bold ${themeStyles.textColor}`}>Wheel of Names</h2>
+                  </div>
+                  <p className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"}`}>
+                    Spin the wheel to randomly select a name!
+                  </p>
+                </div>
+
+                {/* Wheel SVG */}
+                <div className="relative flex justify-center items-center mb-8">
+                  <div className="relative">
+                    {/* Pointer */}
+                    <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2 z-10">
+                      <div className="w-0 h-0 border-l-4 border-r-4 border-b-8 border-l-transparent border-r-transparent border-b-red-500 drop-shadow-lg"></div>
+                    </div>
+                    
+                    {/* Wheel */}
+                    <svg
+                      width="400"
+                      height="400"
+                      className="drop-shadow-2xl"
+                      style={{
+                        transform: `rotate(${spinRotation}deg)`,
+                        transition: isSpinning ? 'transform 3s cubic-bezier(0.23, 1, 0.32, 1)' : 'none'
+                      }}
+                    >
+                      {wheelNames.map((name, index) => {
+                        const segmentAngle = 360 / wheelNames.length
+                        const startAngle = index * segmentAngle
+                        const endAngle = (index + 1) * segmentAngle
+                        
+                        // Calculate path for segment
+                        const centerX = 200
+                        const centerY = 200
+                        const radius = 180
+                        const innerRadius = 40
+                        
+                        const startAngleRad = (startAngle * Math.PI) / 180
+                        const endAngleRad = (endAngle * Math.PI) / 180
+                        
+                        const x1 = centerX + radius * Math.cos(startAngleRad)
+                        const y1 = centerY + radius * Math.sin(startAngleRad)
+                        const x2 = centerX + radius * Math.cos(endAngleRad)
+                        const y2 = centerY + radius * Math.sin(endAngleRad)
+                        
+                        const x3 = centerX + innerRadius * Math.cos(endAngleRad)
+                        const y3 = centerY + innerRadius * Math.sin(endAngleRad)
+                        const x4 = centerX + innerRadius * Math.cos(startAngleRad)
+                        const y4 = centerY + innerRadius * Math.sin(startAngleRad)
+                        
+                        const largeArcFlag = segmentAngle > 180 ? 1 : 0
+                        
+                        const pathData = [
+                          `M ${x4} ${y4}`,
+                          `L ${x1} ${y1}`,
+                          `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+                          `L ${x3} ${y3}`,
+                          `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${x4} ${y4}`,
+                          'Z'
+                        ].join(' ')
+                        
+                        // Colors for segments
+                        const colors = [
+                          '#ef4444', '#f97316', '#eab308', '#22c55e', 
+                          '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'
+                        ]
+                        const color = colors[index % colors.length]
+                        
+                        // Text position
+                        const textAngle = startAngle + segmentAngle / 2
+                        const textRadius = (radius + innerRadius) / 2
+                        const textX = centerX + textRadius * Math.cos((textAngle * Math.PI) / 180)
+                        const textY = centerY + textRadius * Math.sin((textAngle * Math.PI) / 180)
+                        
+                        return (
+                          <g key={name}>
+                            <path
+                              d={pathData}
+                              fill={color}
+                              stroke="white"
+                              strokeWidth="2"
+                              className="drop-shadow-sm"
+                            />
+                            <text
+                              x={textX}
+                              y={textY}
+                              fill="white"
+                              fontSize="16"
+                              fontWeight="bold"
+                              textAnchor="middle"
+                              dominantBaseline="central"
+                              transform={`rotate(${textAngle}, ${textX}, ${textY})`}
+                              className="drop-shadow-sm select-none"
+                            >
+                              {name}
+                            </text>
+                          </g>
+                        )
+                      })}
+                      
+                      {/* Center circle */}
+                      <circle
+                        cx="200"
+                        cy="200"
+                        r="40"
+                        fill="white"
+                        stroke="#374151"
+                        strokeWidth="3"
+                        className="drop-shadow-lg"
+                      />
+                      
+                      {/* Center logo */}
+                      <text
+                        x="200"
+                        y="200"
+                        fill="#374151"
+                        fontSize="12"
+                        fontWeight="bold"
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        className="select-none"
+                      >
+                        SPIN
+                      </text>
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Spin Button */}
+                <div className="text-center mb-8">
+                  <Button
+                    onClick={spinWheel}
+                    disabled={isSpinning || wheelNames.length === 0}
+                    className={`text-xl px-8 py-4 ${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 disabled:opacity-50`}
+                  >
+                    {isSpinning ? (
+                      <>
+                        <div className="animate-spin w-6 h-6 mr-3 border-2 border-white border-t-transparent rounded-full"></div>
+                        Spinning...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-6 h-6 mr-3" />
+                        Spin the Wheel!
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Winner Display */}
+                {selectedName && (
+                  <div className="text-center p-6 rounded-xl bg-gradient-to-r from-green-500/20 to-blue-500/20 border border-green-400/30 mb-8" style={{
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                  }}>
+                    <h3 className={`text-2xl font-bold ${themeStyles.textColor} mb-2`}>🎉 Winner!</h3>
+                    <p className={`text-4xl font-bold text-green-400 animate-pulse`}>{selectedName}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Controls Panel */}
+              <div className="space-y-6">
+                {/* Add Name */}
+                <div className="p-6 rounded-xl" style={getGlassStyle()}>
+                  <h3 className={`text-lg font-semibold ${themeStyles.textColor} mb-4`}>Add Names</h3>
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      type="text"
+                      placeholder="Enter a name..."
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && addName()}
+                      className={`flex-1 px-3 py-2 rounded ${themeStyles.buttonBackground} ${themeStyles.textColor} border border-white/20 placeholder-gray-400`}
+                    />
+                    <Button
+                      onClick={addName}
+                      className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  
+                  {/* Names List */}
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {wheelNames.map((name, index) => (
+                      <div
+                        key={name}
+                        className={`flex items-center justify-between p-2 rounded ${themeStyles.buttonBackground} border border-white/10`}
+                      >
+                        <span className={`${themeStyles.textColor}`}>{name}</span>
+                        <button
+                          onClick={() => removeName(name)}
+                          className="text-red-400 hover:text-red-300 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {wheelNames.length === 0 && (
+                    <div className={`text-center py-4 ${isDayMode ? themeStyles.textColor + "/60" : "text-gray-400"}`}>
+                      <Disc3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No names added yet</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* History */}
+                <div className="p-6 rounded-xl" style={getGlassStyle()}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className={`text-lg font-semibold ${themeStyles.textColor}`}>Recent Winners</h3>
+                    {wheelHistory.length > 0 && (
+                      <Button
+                        onClick={clearHistory}
+                        size="sm"
+                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {wheelHistory.map((entry, index) => (
+                      <div
+                        key={index}
+                        className={`flex items-center justify-between p-2 rounded ${themeStyles.buttonBackground} border border-white/10`}
+                      >
+                        <span className={`font-semibold ${themeStyles.textColor}`}>{entry.name}</span>
+                        <span className={`text-xs ${isDayMode ? themeStyles.textColor + "/60" : "text-gray-400"}`}>
+                          {entry.timestamp.toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {wheelHistory.length === 0 && (
+                    <div className={`text-center py-4 ${isDayMode ? themeStyles.textColor + "/60" : "text-gray-400"}`}>
+                      <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>No spins yet</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Live Streams Component */}
+        {clockMode === "live" && (
+          <div className="max-w-7xl mx-auto w-full">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="flex items-center justify-center mb-4">
+                <Radio className={`w-8 h-8 mr-3 ${themeStyles.textColor}`} />
+                <h2 className={`text-3xl font-bold ${themeStyles.textColor}`}>Live Streams</h2>
+              </div>
+              <p className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"}`}>
+                Watch live streams from Twitch, YouTube, and Kick across different categories
+              </p>
+            </div>
+
+            {/* Category Tabs */}
+            <div className="flex justify-center mb-8">
+              <div className="flex gap-2 p-1 rounded-xl" style={{
+                background: themeStyles.glassBackground,
+                backdropFilter: `blur(${settings.blur}px)`,
+                border: `1px solid ${themeStyles.borderColor}`,
+              }}>
+                {[
+                  { id: "crypto", label: "Crypto", icon: "₿" },
+                  { id: "stocks", label: "Stocks", icon: "📈" },
+                  { id: "gaming", label: "Gaming", icon: "🎮" },
+                  { id: "music", label: "Music", icon: "🎵" },
+                  { id: "news", label: "News", icon: "📰" }
+                ].map((category) => (
+                  <Button
+                    key={category.id}
+                    onClick={() => setSelectedCategory(category.id)}
+                    className={`px-6 py-3 rounded-lg transition-all duration-200 ${
+                      selectedCategory === category.id
+                        ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300 shadow-lg"
+                        : `${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 hover:bg-white/30`
+                    }`}
+                  >
+                    <span className="mr-2">{category.icon}</span>
+                    {category.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Auto-pick Button */}
+            <div className="text-center mb-8">
+              <Button
+                onClick={autoPickStream}
+                disabled={liveStreams.length === 0}
+                className={`px-8 py-4 text-lg ${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 disabled:opacity-50 hover:scale-105 transition-transform`}
+              >
+                <Eye className="w-5 h-5 mr-2" />
+                Watch Live - Auto-pick from {selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
+              </Button>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex justify-center mb-6">
+              <div className="flex gap-2 p-1 rounded-xl" style={{
+                background: themeStyles.glassBackground,
+                backdropFilter: `blur(${settings.blur}px)`,
+                border: `1px solid ${themeStyles.borderColor}`,
+              }}>
+                <Button
+                  onClick={() => setViewMode("grid")}
+                  className={`px-4 py-2 rounded-lg transition-all duration-200 ${
+                    viewMode === "grid"
+                      ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300 shadow-lg"
+                      : `${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 hover:bg-white/30`
+                  }`}
+                >
+                  <Radio className="w-4 h-4 mr-2" />
+                  Grid View
+                </Button>
+                <Button
+                  onClick={() => setViewMode("multi")}
+                  className={`px-4 py-2 rounded-lg transition-all duration-200 ${
+                    viewMode === "multi"
+                      ? "bg-cyan-500/30 border-cyan-400/50 text-cyan-300 shadow-lg"
+                      : `${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20 hover:bg-white/30`
+                  }`}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Multi-View ({selectedStreams.length}/4)
+                </Button>
+              </div>
+            </div>
+
+            {/* Multi-View Mode */}
+            {viewMode === "multi" && (
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={`text-xl font-semibold ${themeStyles.textColor}`}>Multi-Stream View</h3>
+                  {selectedStreams.length > 0 && (
+                    <Button
+                      onClick={clearMultiView}
+                      variant="outline"
+                      className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Clear All
+                    </Button>
+                  )}
+                </div>
+                
+                {selectedStreams.length === 0 ? (
+                  <div className="text-center py-8 p-6 rounded-xl" style={getGlassStyle()}>
+                    <Eye className={`w-16 h-16 mx-auto mb-4 opacity-50 ${themeStyles.textColor}`} />
+                    <p className={`${themeStyles.textColor} opacity-70 mb-4`}>No streams selected for multi-view</p>
+                    <p className={`text-sm ${themeStyles.textColor} opacity-50`}>Click the "+" button on any stream card to add it to multi-view mode</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedStreams.map((stream, index) => (
+                      <div key={stream.id} className="relative">
+                        <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                          <iframe
+                            src={getEmbedUrl(stream)}
+                            className="w-full h-full"
+                            frameBorder="0"
+                            allowFullScreen
+                            allow="autoplay; encrypted-media; picture-in-picture"
+                            title={stream.title}
+                            onError={() => handleIframeError(stream)}
+                            onLoad={() => handleIframeLoad(stream)}
+                          />
+                        </div>
+                        <div className="absolute top-2 right-2">
+                          <Button
+                            onClick={() => removeFromMultiView(stream.id)}
+                            size="sm"
+                            className="bg-red-500 hover:bg-red-600 text-white w-8 h-8 p-0 rounded-full"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="mt-2 p-3 rounded-lg" style={getGlassStyle()}>
+                          <h4 className={`font-semibold ${themeStyles.textColor} text-sm line-clamp-1`}>
+                            {stream.title}
+                          </h4>
+                          <p className={`text-xs ${themeStyles.textColor} opacity-70`}>
+                            {stream.streamer} • {formatViewers(stream.viewers)} viewers
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Streams Grid */}
+            {viewMode === "grid" && (
+              <div className="space-y-6">
+                {isLoadingStreams ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className={`${themeStyles.textColor}`}>Loading live streams...</p>
+                  </div>
+                ) : streamsError ? (
+                  <div className="text-center py-12">
+                    <p className={`${themeStyles.textColor} text-red-400`}>{streamsError}</p>
+                    <p className={`${themeStyles.textColor} opacity-70 mt-2`}>Showing demo data instead</p>
+                  </div>
+                ) : liveStreams.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Radio className={`w-16 h-16 mx-auto mb-4 opacity-50 ${themeStyles.textColor}`} />
+                    <p className={`${themeStyles.textColor} opacity-70`}>No live streams found for {selectedCategory}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {liveStreams.map((stream) => {
+                      const platformInfo = getPlatformInfo(stream.platform)
+                      const isInMultiView = selectedStreams.find(s => s.id === stream.id)
+                      return (
+                        <div
+                          key={stream.id}
+                          className="group cursor-pointer transition-all duration-300 hover:scale-105"
+                          onClick={() => watchLiveStream(stream)}
+                        >
+                          <div className="relative overflow-hidden rounded-xl" style={getGlassStyle()}>
+                            {/* Thumbnail */}
+                            <div className="relative h-48 overflow-hidden">
+                              <img
+                                src={stream.thumbnail}
+                                alt={stream.title}
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                              />
+                              {/* Live indicator */}
+                              <div className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 rounded-full bg-red-500 text-white text-xs font-semibold">
+                                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                                LIVE
+                              </div>
+                              {/* Platform badge */}
+                              <div className={`absolute top-3 right-3 px-2 py-1 rounded-full ${platformInfo.bg} ${platformInfo.color} text-xs font-semibold`}>
+                                {platformInfo.icon} {stream.platform.toUpperCase()}
+                              </div>
+                              {/* Viewers */}
+                              <div className="absolute bottom-3 right-3 px-2 py-1 rounded-full bg-black/70 text-white text-xs font-semibold">
+                                👁 {formatViewers(stream.viewers)}
+                              </div>
+                              {/* Duration */}
+                              <div className="absolute bottom-3 left-3 px-2 py-1 rounded-full bg-black/70 text-white text-xs font-semibold">
+                                ⏱ {formatStreamDuration(stream.startedAt)}
+                              </div>
+                              {/* Play overlay */}
+                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                                <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center">
+                                  <Play className="w-8 h-8 text-black ml-1" />
+                                </div>
+                              </div>
+                              {/* Multi-view indicator */}
+                              {isInMultiView && (
+                                <div className="absolute top-3 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded-full bg-cyan-500 text-white text-xs font-semibold">
+                                  ✓ Multi-view
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Stream Info */}
+                            <div className="p-4">
+                              <h3 className={`font-semibold text-lg mb-2 ${themeStyles.textColor} line-clamp-2 group-hover:text-cyan-400 transition-colors`}>
+                                {stream.title}
+                              </h3>
+                              <p className={`text-sm ${themeStyles.textColor} opacity-70 mb-3`}>
+                                {stream.streamer}
+                              </p>
+                              
+                              {/* Action Buttons */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex gap-2">
+                                  <Button
+                                    className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-lg transition-colors text-sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      watchLiveStream(stream)
+                                    }}
+                                  >
+                                    <Play className="w-4 h-4 mr-1" />
+                                    Watch
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={`px-3 py-2 rounded-lg text-sm ${
+                                      isInMultiView 
+                                        ? 'bg-green-500/20 border-green-400/50 text-green-300' 
+                                        : `${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`
+                                    }`}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (isInMultiView) {
+                                        removeFromMultiView(stream.id)
+                                      } else {
+                                        addToMultiView(stream)
+                                      }
+                                    }}
+                                  >
+                                    {isInMultiView ? (
+                                      <>
+                                        <X className="w-4 h-4 mr-1" />
+                                        Remove
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-4 h-4 mr-1" />
+                                        Add
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    window.open(stream.url, '_blank')
+                                  }}
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Category Description */}
+            <div className="mt-12 p-6 rounded-xl" style={getGlassStyle()}>
+              <h3 className={`text-xl font-semibold mb-4 ${themeStyles.textColor} text-center`}>
+                About {selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Streams
+              </h3>
+              <div className={`text-sm ${isDayMode ? themeStyles.textColor + "/70" : "text-gray-300"} text-center space-y-2`}>
+                {selectedCategory === "crypto" && (
+                  <>
+                    <p>• Live cryptocurrency analysis and trading</p>
+                    <p>• Real-time market updates and price action</p>
+                    <p>• DeFi protocol reviews and NFT discussions</p>
+                  </>
+                )}
+                {selectedCategory === "stocks" && (
+                  <>
+                    <p>• Stock market analysis and trading strategies</p>
+                    <p>• Real-time market data and company earnings</p>
+                    <p>• Investment advice and portfolio management</p>
+                  </>
+                )}
+                {selectedCategory === "gaming" && (
+                  <>
+                    <p>• Live gameplay from popular games</p>
+                    <p>• Esports tournaments and competitive matches</p>
+                    <p>• Gaming tutorials and community interaction</p>
+                  </>
+                )}
+                {selectedCategory === "music" && (
+                  <>
+                    <p>• Live music performances and concerts</p>
+                    <p>• Music lessons and instrument tutorials</p>
+                    <p>• Studio sessions and music production</p>
+                  </>
+                )}
+                {selectedCategory === "news" && (
+                  <>
+                    <p>• Breaking news and current events</p>
+                    <p>• Political analysis and commentary</p>
+                    <p>• Sports highlights and weather updates</p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Embedded Player Modal */}
+        {isPlayerOpen && selectedStream && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="relative w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-2xl" style={getGlassStyle()}>
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-white/20">
+                <div className="flex items-center gap-3">
+                  <div className={`px-3 py-1 rounded-full ${getPlatformInfo(selectedStream.platform).bg} ${getPlatformInfo(selectedStream.platform).color} text-sm font-semibold`}>
+                    {getPlatformInfo(selectedStream.platform).icon} {selectedStream.platform.toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className={`font-semibold ${themeStyles.textColor}`}>{selectedStream.title}</h3>
+                    <p className={`text-sm ${themeStyles.textColor} opacity-70`}>by {selectedStream.streamer}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-sm">
+                    <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                    LIVE
+                  </div>
+                  <Button
+                    onClick={closePlayer}
+                    size="sm"
+                    className="text-gray-400 hover:text-gray-300"
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Twitch Embed Notice */}
+              {selectedStream.platform === 'twitch' && (
+                <div className="px-4 py-2 bg-purple-500/10 border-b border-purple-500/20">
+                  <p className={`text-xs ${themeStyles.textColor} opacity-80 text-center`}>
+                    💡 <strong>Note:</strong> Twitch embeds may not work in development mode due to domain verification requirements. 
+                    Use the "Watch on Twitch" button below if the embed fails to load.
+                  </p>
+                </div>
+              )}
+
+              {/* Player */}
+              <div className="relative w-full aspect-video bg-black">
+                <iframe
+                  src={getEmbedUrl(selectedStream)}
+                  className="w-full h-full"
+                  frameBorder="0"
+                  allowFullScreen
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  title={selectedStream.title}
+                  onError={() => handleIframeError(selectedStream)}
+                  onLoad={() => handleIframeLoad(selectedStream)}
+                />
+                {/* Loading indicator */}
+                <div className="loading-indicator absolute inset-0 flex items-center justify-center bg-black/50 transition-opacity duration-300">
+                  <div className="text-center">
+                    <div className="animate-spin w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className={`${themeStyles.textColor}`}>Loading {selectedStream.platform} stream...</p>
+                    <p className={`text-sm ${themeStyles.textColor} opacity-70 mt-2`}>
+                      {selectedStream.platform === 'youtube' && 'This may take a few seconds...'}
+                      {selectedStream.platform === 'twitch' && 'Connecting to Twitch...'}
+                      {selectedStream.platform === 'kick' && 'Connecting to Kick...'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stream Info */}
+              <div className="p-4 border-t border-white/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm ${themeStyles.textColor} opacity-70`}>👁</span>
+                      <span className={`font-semibold ${themeStyles.textColor}`}>{formatViewers(selectedStream.viewers)} viewers</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm ${themeStyles.textColor} opacity-70`}>⏱</span>
+                      <span className={`font-semibold ${themeStyles.textColor}`}>{formatStreamDuration(selectedStream.startedAt)}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {selectedStream.platform === 'twitch' && (
+                      <Button
+                        onClick={() => window.open(selectedStream.url, '_blank')}
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Watch on Twitch
+                      </Button>
+                    )}
+                    <Button
+                      onClick={() => window.open(selectedStream.url, '_blank')}
+                      variant="outline"
+                      className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Open on {selectedStream.platform}
+                    </Button>
+                    <Button
+                      onClick={closePlayer}
+                      className="bg-cyan-500 hover:bg-cyan-600 text-white"
+                    >
+                      Close Player
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Settings Modal */}
+        {settingsOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto" style={getGlassStyle()}>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className={`text-2xl font-bold ${themeStyles.textColor}`}>Settings</h2>
+                  <Button
+                    onClick={() => setSettingsOpen(false)}
+                    size="sm"
+                    className="text-gray-400 hover:text-gray-300"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Glass Effect Settings */}
+                  <div>
+                    <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>Glass Effect</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-sm font-medium mb-2 ${themeStyles.textColor}`}>
+                          Blur: {settings.blur}px
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="50"
+                          value={settings.blur}
+                          onChange={(e) => setSettings(prev => ({ ...prev, blur: parseInt(e.target.value) }))}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium mb-2 ${themeStyles.textColor}`}>
+                          Refraction: {settings.refraction}
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.01"
+                          value={settings.refraction}
+                          onChange={(e) => setSettings(prev => ({ ...prev, refraction: parseFloat(e.target.value) }))}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium mb-2 ${themeStyles.textColor}`}>
+                          Depth: {settings.depth}px
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="30"
+                          value={settings.depth}
+                          onChange={(e) => setSettings(prev => ({ ...prev, depth: parseInt(e.target.value) }))}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium mb-2 ${themeStyles.textColor}`}>
+                          Border Radius: {settings.borderRadius}px
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="50"
+                          value={settings.borderRadius}
+                          onChange={(e) => setSettings(prev => ({ ...prev, borderRadius: parseInt(e.target.value) }))}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Color Settings */}
+                  <div>
+                    <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>Colors</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-sm font-medium mb-2 ${themeStyles.textColor}`}>
+                          Primary Color
+                        </label>
+                        <input
+                          type="color"
+                          value={inputColor}
+                          onChange={(e) => setInputColor(e.target.value)}
+                          className="w-full h-10 rounded border border-white/20"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium mb-2 ${themeStyles.textColor}`}>
+                          Color Opacity: {colorSettings.opacity}
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.01"
+                          value={colorSettings.opacity}
+                          onChange={(e) => setColorSettings(prev => ({ ...prev, opacity: parseFloat(e.target.value) }))}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Theme Settings */}
+                  <div>
+                    <h3 className={`text-lg font-semibold mb-4 ${themeStyles.textColor}`}>Theme</h3>
+                    <div className="flex items-center gap-4">
+                      <Button
+                        onClick={toggleTheme}
+                        className={`${themeStyles.buttonBackground} ${themeStyles.textColor} border-white/20`}
+                      >
+                        {isDayMode ? <Sun className="w-4 h-4 mr-2" /> : <Moon className="w-4 h-4 mr-2" />}
+                        Switch to {isDayMode ? 'Dark' : 'Light'} Mode
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
