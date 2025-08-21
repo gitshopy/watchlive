@@ -1096,8 +1096,9 @@ export default function Home() {
         
         case 'kick':
           // Kick embed format: https://player.kick.com/CHANNEL_NAME
+          // According to Kick docs: https://help.kick.com/en/articles/8010826-how-to-embed-your-kick-livestream
           const kickChannel = stream.url.split('/').pop() || stream.streamer.toLowerCase()
-          return `https://player.kick.com/${kickChannel}`
+          return `https://player.kick.com/${kickChannel}?autoplay=1&muted=0`
         
         default:
           return stream.url
