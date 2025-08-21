@@ -32,14 +32,16 @@ const API_CONFIG = {
     }
   },
   kick: {
-    apiKey: process.env.KICK_API_KEY,
+    clientId: process.env.KICK_CLIENT_ID,
+    clientSecret: process.env.KICK_CLIENT_SECRET,
     baseUrl: 'https://kick.com/api/v1',
     categories: {
       crypto: ['cryptocurrency', 'finance'],
       stocks: ['finance', 'business'],
       gaming: ['gaming', 'esports'],
       music: ['music', 'creative'],
-      news: ['news', 'politics']
+      news: ['news', 'politics'],
+      sports: ['sports', 'esports', 'gaming']
     }
   }
 }
@@ -76,7 +78,8 @@ async function fetchTwitchStreams(category: string): Promise<LiveStream[]> {
       stocks: ['509658', '509660', '509661'], // Just Chatting, Politics, Science & Technology  
       gaming: ['32982', '516575', '509658', '509660'], // GTA V, Minecraft, Just Chatting, Politics
       music: ['509658', '26936', '509660'], // Just Chatting, Music, Politics
-      news: ['509658', '509660', '509661'] // Just Chatting, Politics, Science & Technology
+      news: ['509658', '509660', '509661'], // Just Chatting, Politics, Science & Technology
+      sports: ['509658', '509660', '509661'] // Just Chatting, Politics, Science & Technology
     }
     
     const gameIds = categoryGames[category as keyof typeof categoryGames] || ['509658'] // Default to Just Chatting
@@ -84,7 +87,7 @@ async function fetchTwitchStreams(category: string): Promise<LiveStream[]> {
 
     // First try to get streams by game ID
     for (const gameId of gameIds.slice(0, 3)) { // Try 3 games
-      const streamsResponse = await fetch(`${API_CONFIG.twitch.baseUrl}/streams?game_id=${gameId}&first=10`, {
+      const streamsResponse = await fetch(`${API_CONFIG.twitch.baseUrl}/streams?game_id=${gameId}&first=10&language=en`, {
         headers: {
           'Client-ID': API_CONFIG.twitch.clientId,
           'Authorization': `Bearer ${tokenData.access_token}`,
@@ -116,7 +119,7 @@ async function fetchTwitchStreams(category: string): Promise<LiveStream[]> {
 
     // If we don't have enough streams, try to get popular live streams
     if (streams.length < 3) {
-      const popularStreamsResponse = await fetch(`${API_CONFIG.twitch.baseUrl}/streams?first=20`, {
+      const popularStreamsResponse = await fetch(`${API_CONFIG.twitch.baseUrl}/streams?first=20&language=en`, {
         headers: {
           'Client-ID': API_CONFIG.twitch.clientId,
           'Authorization': `Bearer ${tokenData.access_token}`,
@@ -164,7 +167,8 @@ async function fetchYouTubeStreams(category: string): Promise<LiveStream[]> {
       stocks: ['stock market', 'trading', 'investing', 'finance', 'stocks', 'market analysis'],
       gaming: ['gaming', 'esports', 'gameplay', 'streaming', 'live gaming', 'game stream'],
       music: ['music', 'live music', 'concert', 'performance', 'live performance', 'music stream'],
-      news: ['news', 'breaking news', 'live news', 'current events', 'live coverage', 'news stream']
+      news: ['news', 'breaking news', 'live news', 'current events', 'live coverage', 'news stream'],
+      sports: ['sports', 'live sports', 'basketball', 'football', 'baseball', 'tennis', 'esports', 'sports stream']
     }
     
     const keywords = categoryKeywords[category as keyof typeof categoryKeywords] || ['live']
@@ -172,7 +176,7 @@ async function fetchYouTubeStreams(category: string): Promise<LiveStream[]> {
 
     for (const keyword of keywords.slice(0, 3)) { // Try 3 keywords
       const response = await fetch(
-        `${API_CONFIG.youtube.baseUrl}/search?part=snippet&eventType=live&type=video&q=${encodeURIComponent(keyword)}&maxResults=5&key=${API_CONFIG.youtube.apiKey}`
+        `${API_CONFIG.youtube.baseUrl}/search?part=snippet&eventType=live&type=video&q=${encodeURIComponent(keyword)}&maxResults=5&key=${API_CONFIG.youtube.apiKey}&relevanceLanguage=en`
       )
 
       if (response.ok) {
@@ -201,7 +205,7 @@ async function fetchYouTubeStreams(category: string): Promise<LiveStream[]> {
     // If we don't have enough streams, try to get general live streams
     if (streams.length < 3) {
       const generalResponse = await fetch(
-        `${API_CONFIG.youtube.baseUrl}/search?part=snippet&eventType=live&type=video&q=live&maxResults=10&key=${API_CONFIG.youtube.apiKey}`
+        `${API_CONFIG.youtube.baseUrl}/search?part=snippet&eventType=live&type=video&q=live&maxResults=10&key=${API_CONFIG.youtube.apiKey}&relevanceLanguage=en`
       )
 
       if (generalResponse.ok) {
@@ -233,34 +237,103 @@ async function fetchYouTubeStreams(category: string): Promise<LiveStream[]> {
 
 // Kick API Functions (if available)
 async function fetchKickStreams(category: string): Promise<LiveStream[]> {
-  if (!API_CONFIG.kick.apiKey) {
-    console.warn('Kick API key not configured')
+  if (!API_CONFIG.kick.clientId || !API_CONFIG.kick.clientSecret) {
+    console.warn('Kick API credentials not configured')
     return []
   }
 
   try {
-    // Note: Kick's public API is limited, this is a placeholder
-    const response = await fetch(`${API_CONFIG.kick.baseUrl}/streams?category=${category}&limit=6`, {
+    // Get access token
+    const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
+      method: 'POST',
       headers: {
-        'Authorization': `Bearer ${API_CONFIG.kick.apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
+      body: new URLSearchParams({
+        client_id: API_CONFIG.kick.clientId,
+        client_secret: API_CONFIG.kick.clientSecret,
+        grant_type: 'client_credentials',
+      }),
     })
 
-    if (response.ok) {
-      const data = await response.json()
-      return data.streams.map((stream: any) => ({
-        id: `kick-${stream.id}`,
-        title: stream.title,
-        streamer: stream.user.username,
-        platform: 'kick' as const,
-        category,
-        viewers: stream.viewers,
-        thumbnail: stream.thumbnail,
-        url: `https://kick.com/${stream.user.username}`,
-        startedAt: stream.started_at,
-        isLive: true
-      }))
+    const tokenData = await tokenResponse.json()
+    if (!tokenData.access_token) {
+      throw new Error('Failed to get Kick access token')
     }
+
+    // Use popular games/categories that are more likely to have live streams
+    const categoryGames = {
+      crypto: ['cryptocurrency', 'finance'],
+      stocks: ['finance', 'business'],
+      gaming: ['gaming', 'esports'],
+      music: ['music', 'creative'],
+      news: ['news', 'politics'],
+      sports: ['sports', 'esports', 'gaming']
+    }
+    
+    const gameIds = categoryGames[category as keyof typeof categoryGames] || ['cryptocurrency'] // Default to Crypto
+    const streams: LiveStream[] = []
+
+    // First try to get streams by game ID
+    for (const gameId of gameIds.slice(0, 3)) { // Try 3 games
+      const streamsResponse = await fetch(`${API_CONFIG.kick.baseUrl}/streams?category=${gameId}&limit=6`, {
+        headers: {
+          'Authorization': `Bearer ${tokenData.access_token}`,
+        },
+      })
+
+      if (streamsResponse.ok) {
+        const streamsData = await streamsResponse.json()
+        if (streamsData.streams && streamsData.streams.length > 0) {
+          const kickStreams = streamsData.streams.map((stream: any) => ({
+            id: `kick-${stream.id}`,
+            title: stream.title,
+            streamer: stream.user.username,
+            platform: 'kick' as const,
+            category,
+            viewers: stream.viewers,
+            thumbnail: stream.thumbnail,
+            url: `https://kick.com/${stream.user.username}`,
+            startedAt: stream.started_at,
+            isLive: true
+          }))
+          streams.push(...kickStreams)
+        }
+      }
+      
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    // If we don't have enough streams, try to get popular live streams
+    if (streams.length < 3) {
+      const popularStreamsResponse = await fetch(`${API_CONFIG.kick.baseUrl}/streams?limit=10`, {
+        headers: {
+          'Authorization': `Bearer ${tokenData.access_token}`,
+        },
+      })
+
+      if (popularStreamsResponse.ok) {
+        const popularData = await popularStreamsResponse.json()
+        if (popularData.streams && popularData.streams.length > 0) {
+          const popularStreams = popularData.streams.slice(0, 10 - streams.length).map((stream: any) => ({
+            id: `kick-${stream.id}`,
+            title: stream.title,
+            streamer: stream.user.username,
+            platform: 'kick' as const,
+            category,
+            viewers: stream.viewers,
+            thumbnail: stream.thumbnail,
+            url: `https://kick.com/${stream.user.username}`,
+            startedAt: stream.started_at,
+            isLive: true
+          }))
+          streams.push(...popularStreams)
+        }
+      }
+    }
+
+    return streams.slice(0, 10) // Return up to 10 streams
   } catch (error) {
     console.error('Error fetching Kick streams:', error)
   }
@@ -675,6 +748,80 @@ const mockStreams: Record<string, LiveStream[]> = {
       startedAt: new Date(Date.now() - 75 * 60 * 1000).toISOString(),
       isLive: true
     }
+  ],
+  sports: [
+    {
+      id: "sports-1",
+      title: "NBA Live - Lakers vs Warriors",
+      streamer: "NBAStreamer",
+      platform: "twitch",
+      category: "sports",
+      viewers: 56780,
+      thumbnail: "https://picsum.photos/320/180?random=31",
+      url: "https://twitch.tv/nbastreamer",
+      startedAt: new Date(Date.now() - 180 * 60 * 1000).toISOString(),
+      isLive: true
+    },
+    {
+      id: "sports-2",
+      title: "NFL Highlights - Week 10",
+      streamer: "NFLViewer",
+      platform: "youtube",
+      category: "sports",
+      viewers: 45670,
+      thumbnail: "https://picsum.photos/320/180?random=32",
+      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      startedAt: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
+      isLive: true
+    },
+    {
+      id: "sports-3",
+      title: "MLB Game - Dodgers vs Padres",
+      streamer: "MLBViewer",
+      platform: "kick",
+      category: "sports",
+      viewers: 34560,
+      thumbnail: "https://picsum.photos/320/180?random=33",
+      url: "https://kick.com/mlbviewer",
+      startedAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+      isLive: true
+    },
+    {
+      id: "sports-4",
+      title: "Tennis - ATP Finals",
+      streamer: "TennisFan",
+      platform: "twitch",
+      category: "sports",
+      viewers: 23450,
+      thumbnail: "https://picsum.photos/320/180?random=34",
+      url: "https://twitch.tv/tennisfan",
+      startedAt: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
+      isLive: true
+    },
+    {
+      id: "sports-5",
+      title: "ESports - Dota 2 Pro Circuit",
+      streamer: "ESportsGuru",
+      platform: "youtube",
+      category: "sports",
+      viewers: 18760,
+      thumbnail: "https://picsum.photos/320/180?random=35",
+      url: "https://www.youtube.com/watch?v=YQHsXMglC9A",
+      startedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      isLive: true
+    },
+    {
+      id: "sports-6",
+      title: "WWE Raw - Latest Episode",
+      streamer: "WWEViewer",
+      platform: "kick",
+      category: "sports",
+      viewers: 12340,
+      thumbnail: "https://picsum.photos/320/180?random=36",
+      url: "https://kick.com/wweviewer",
+      startedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      isLive: true
+    }
   ]
 }
 
@@ -684,7 +831,7 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category') || 'crypto'
     
     // Validate category
-    const validCategories = ['crypto', 'stocks', 'gaming', 'music', 'news']
+    const validCategories = ['crypto', 'stocks', 'gaming', 'music', 'news', 'sports']
     if (!validCategories.includes(category)) {
       return NextResponse.json(
         { error: 'Invalid category' },
