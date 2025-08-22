@@ -546,7 +546,7 @@ function useIsDarkMode() {
   return isDark
 }
 
-// Custom CSS for better clock styling
+// Custom CSS for better clock styling and mobile fullscreen
 const customClockStyles = `
   .react-clock {
     background: white;
@@ -585,6 +585,100 @@ const customClockStyles = `
   .react-clock__mark__body {
     background: #6b7280 !important;
   }
+  
+  /* Mobile fullscreen text scaling */
+  @media (max-width: 640px) {
+    .fullscreen-time {
+      font-size: clamp(2.5rem, 12vw, 6rem) !important;
+      line-height: 1 !important;
+    }
+    
+    .fullscreen-title {
+      font-size: clamp(1.25rem, 3.5vw, 2.5rem) !important;
+    }
+    
+    .fullscreen-subtitle {
+      font-size: clamp(0.875rem, 2.5vw, 1.5rem) !important;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .fullscreen-time {
+      font-size: clamp(2rem, 10vw, 5rem) !important;
+    }
+    
+    .fullscreen-title {
+      font-size: clamp(1rem, 3vw, 2rem) !important;
+    }
+    
+    .fullscreen-subtitle {
+      font-size: clamp(0.75rem, 2vw, 1.25rem) !important;
+    }
+  }
+  
+  /* Extra small mobile devices */
+  @media (max-width: 360px) {
+    .fullscreen-time {
+      font-size: clamp(1.5rem, 8vw, 4rem) !important;
+    }
+    
+    .fullscreen-title {
+      font-size: clamp(0.875rem, 2.5vw, 1.5rem) !important;
+    }
+    
+    .fullscreen-subtitle {
+      font-size: clamp(0.625rem, 1.5vw, 1rem) !important;
+    }
+  }
+  
+  /* Landscape orientation on mobile */
+  @media (max-width: 768px) and (orientation: landscape) {
+    .fullscreen-time {
+      font-size: clamp(2rem, 8vw, 5rem) !important;
+    }
+    
+    .fullscreen-title {
+      font-size: clamp(1rem, 2.5vw, 2rem) !important;
+    }
+    
+    .fullscreen-subtitle {
+      font-size: clamp(0.75rem, 2vw, 1.25rem) !important;
+    }
+  }
+  
+  /* High DPI displays */
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .fullscreen-time {
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+  }
+  
+
+  
+  /* Fullscreen layout improvements */
+  .fullscreen-time {
+    margin-top: 2rem !important;
+    line-height: 0.9 !important;
+  }
+  
+  .fullscreen-subtitle {
+    margin-top: 1.5rem !important;
+  }
+  
+  /* Prevent text overlap in fullscreen */
+  @media (max-width: 640px) {
+    .fullscreen-time {
+      margin-top: 1.5rem !important;
+      font-size: clamp(2.5rem, 10vw, 6rem) !important;
+    }
+    
+    .fullscreen-subtitle {
+      margin-top: 1rem !important;
+      font-size: clamp(0.875rem, 2.5vw, 1.5rem) !important;
+    }
+  }
 `
 
 export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: WorldClockProps) {
@@ -618,6 +712,26 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
 
     return () => clearInterval(timer)
   }, [])
+
+  // Handle screen orientation changes for mobile fullscreen
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      // Force a re-render when orientation changes to recalculate text sizes
+      if (fullscreenTimebox) {
+        setTimeout(() => {
+          setCurrentTimeState(new Date())
+        }, 100)
+      }
+    }
+
+    window.addEventListener('orientationchange', handleOrientationChange)
+    window.addEventListener('resize', handleOrientationChange)
+
+    return () => {
+      window.removeEventListener('orientationchange', handleOrientationChange)
+      window.removeEventListener('resize', handleOrientationChange)
+    }
+  }, [fullscreenTimebox])
 
   // Initialize filtered timezones
   useEffect(() => {
@@ -1054,43 +1168,47 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
 
     return (
       <div
-        className={`transition-all duration-300 p-6 ${
+        className={`transition-all duration-300 ${
           isFullscreen
-            ? `fixed inset-0 z-50 ${fullscreenBgClass} backdrop-blur-md flex items-center justify-center`
-            : ""
+            ? `fixed inset-0 z-50 ${fullscreenBgClass} backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-hidden`
+            : "p-6"
         }`}
         style={isFullscreen ? {} : getGlassStyle()}
       >
         <div className="text-center relative w-full">
           <div
-            className={`flex justify-between items-center mb-4 ${
-              isFullscreen ? "absolute top-4 left-4 right-4" : ""
+            className={`flex justify-between items-center ${
+              isFullscreen ? "absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-10" : "mb-4"
             }`}
           >
-            <h3 className={`text-lg font-semibold ${fullscreenTextColor}`}>
+            <h3 className={`font-semibold ${fullscreenTextColor} ${
+              isFullscreen
+                ? "hidden"
+                : "text-lg"
+            }`}>
               {title}
             </h3>
             <div className="flex gap-2">
               <Button
                 onClick={resizeTimebox}
                 size="sm"
-                className={`p-1 ${themeStyles.buttonBackground} ${fullscreenTextColor}`}
+                className={`${isFullscreen ? "p-2 sm:p-1" : "p-1"} ${themeStyles.buttonBackground} ${fullscreenTextColor}`}
               >
                 {timeboxSize === "normal" ? (
-                  <Maximize2 className={`w-4 h-4 ${fullscreenTextColor}`} />
+                  <Maximize2 className={`${isFullscreen ? "w-6 h-6 sm:w-4 sm:h-4" : "w-4 h-4"} ${fullscreenTextColor}`} />
                 ) : (
-                  <Minimize2 className={`w-4 h-4 ${fullscreenTextColor}`} />
+                  <Minimize2 className={`${isFullscreen ? "w-6 h-6 sm:w-4 sm:h-4" : "w-4 h-4"} ${fullscreenTextColor}`} />
                 )}
               </Button>
               <Button
                 onClick={() => toggleFullscreen(id)}
                 size="sm"
-                className={`p-1 ${themeStyles.buttonBackground} ${fullscreenTextColor}`}
+                className={`${isFullscreen ? "p-2 sm:p-1" : "p-1"} ${themeStyles.buttonBackground} ${fullscreenTextColor}`}
               >
                 {isFullscreen ? (
-                  <Minimize2 className={`w-4 h-4 ${fullscreenTextColor}`} />
+                  <Minimize2 className={`${isFullscreen ? "w-6 h-6 sm:w-4 sm:h-4" : "w-4 h-4"} ${fullscreenTextColor}`} />
                 ) : (
-                  <Maximize2 className={`w-4 h-4 ${fullscreenTextColor}`} />
+                  <Maximize2 className={`${isFullscreen ? "w-6 h-6 sm:w-4 sm:h-4" : "w-4 h-4"} ${fullscreenTextColor}`} />
                 )}
               </Button>
             </div>
@@ -1099,7 +1217,7 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
           <div
             className={`font-mono font-bold ${fullscreenTextColor} ${
               isFullscreen
-                ? "text-[10rem] leading-none"
+                ? "text-[clamp(3rem,15vw,10rem)] leading-none fullscreen-time mt-16"
                 : timeboxSize === "large"
                 ? "text-6xl"
                 : "text-4xl"
@@ -1108,7 +1226,11 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
             {time}
           </div>
 
-          <div className={`text-sm ${fullscreenTextColor} opacity-70 mt-2`}>
+          <div className={`${fullscreenTextColor} opacity-70 ${
+            isFullscreen
+              ? "text-[clamp(1rem,3vw,2rem)] fullscreen-subtitle mt-6"
+              : "text-sm mt-2"
+          }`}>
             {subtitle}
           </div>
         </div>
