@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Orbitron } from "next/font/google"
 import "./globals.css"
+import GoogleAnalytics from "@/components/GoogleAnalytics"
 
 const orbitron = Orbitron({
   subsets: ["latin"],
@@ -34,6 +35,8 @@ html {
       </head>
       <body>
         {children}
+
+        <GoogleAnalytics />
         
         {/* Footer with Disclaimers and Trademark Warnings */}
         <footer className="bg-gray-900 text-gray-300 py-8 px-4 mt-16">
