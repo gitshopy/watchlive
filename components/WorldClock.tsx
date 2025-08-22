@@ -7,6 +7,7 @@ import { toast } from "@/hooks/use-toast"
 import Flag from "react-flagkit"
 import ReactClock from "react-clock"
 import "react-clock/dist/Clock.css"
+import { trackWorldClockEvent } from "@/lib/analytics"
 
 interface WorldClockProps {
   currentTime: Date
@@ -655,6 +656,31 @@ const customClockStyles = `
     }
   }
   
+  /* Minimized city styling */
+  .minimized-city {
+    transform: scale(0.85);
+    opacity: 0.7;
+    filter: grayscale(30%);
+  }
+  
+  .minimized-city:hover {
+    transform: scale(0.9);
+    opacity: 0.9;
+    filter: grayscale(0%);
+  }
+  
+  .minimized-city .react-clock {
+    transform: scale(0.8);
+  }
+  
+  .minimized-city .font-bold {
+    font-size: 0.9em;
+  }
+  
+  .minimized-city .text-sm {
+    font-size: 0.8em;
+  }
+  
 
   
   /* Fullscreen layout improvements */
@@ -703,6 +729,7 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
 
   const [fullscreenTimebox, setFullscreenTimebox] = useState<string | null>(null)
   const [timeboxSize, setTimeboxSize] = useState<"normal" | "large">("normal")
+  const [minimizedCities, setMinimizedCities] = useState<Set<string>>(new Set())
 
   // Real-time clock updates
   useEffect(() => {
@@ -822,11 +849,34 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
   }
 
   const toggleFullscreen = (timeboxId: string) => {
+    const isEntering = fullscreenTimebox !== timeboxId
     setFullscreenTimebox((prev) => (prev === timeboxId ? null : timeboxId))
+    
+    // Track fullscreen usage
+    trackWorldClockEvent.fullscreenToggled(
+      isEntering ? 'enter' : 'exit', 
+      timeboxId
+    )
   }
 
   const resizeTimebox = () => {
     setTimeboxSize(timeboxSize === "normal" ? "large" : "normal")
+  }
+
+  const toggleCityMinimize = (cityName: string) => {
+    setMinimizedCities(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(cityName)) {
+        newSet.delete(cityName)
+        // Track city maximize
+        trackWorldClockEvent.cityMinimized(cityName, 'maximize')
+      } else {
+        newSet.add(cityName)
+        // Track city minimize
+        trackWorldClockEvent.cityMinimized(cityName, 'minimize')
+      }
+      return newSet
+    })
   }
 
   // Search and filter timezones with IntelliSense
@@ -854,6 +904,11 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
       setSearchSuggestions(suggestions)
       setShowSuggestions(suggestions.length > 0)
       setSelectedSuggestionIndex(-1)
+      
+      // Track timezone searches (debounced to avoid spam)
+      if (searchTerm.length >= 3) {
+        trackWorldClockEvent.timezoneSearched(searchTerm)
+      }
     }
   }
 
@@ -901,6 +956,13 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
   const addToSelectedCities = (cityName: string) => {
     if (!selectedCities.includes(cityName)) {
       setSelectedCities([...selectedCities, cityName])
+      
+      // Track city addition
+      const cityData = WORLD_TIMEZONES.find(tz => tz.name === cityName)
+      if (cityData) {
+        trackWorldClockEvent.cityAdded(cityName, cityData.country)
+      }
+      
       toast({
         title: "City Added",
         description: `${cityName} has been added to your selected cities.`,
@@ -911,6 +973,13 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
   // Remove city from selected cities
   const removeFromSelectedCities = (cityName: string) => {
     setSelectedCities(selectedCities.filter(city => city !== cityName))
+    
+    // Track city removal
+    const cityData = WORLD_TIMEZONES.find(tz => tz.name === cityName)
+    if (cityData) {
+      trackWorldClockEvent.cityRemoved(cityName, cityData.country)
+    }
+    
     toast({
       title: "City Removed",
       description: `${cityName} has been removed from your selected cities.`,
@@ -1243,6 +1312,8 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
     const cityData = WORLD_TIMEZONES.find(tz => tz.name === cityName)
     if (!cityData) return null
 
+    const isMinimized = minimizedCities.has(cityName)
+
     // Calculate city time based on current time state
     let cityTime
     try {
@@ -1252,7 +1323,9 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
     }
 
     return (
-      <div key={cityName} className="flex flex-col items-center p-6 bg-gradient-to-br from-white/20 to-white/10 rounded-xl backdrop-blur-md border border-white/30 hover:border-white/50 transition-all duration-300 hover:bg-gradient-to-br hover:from-white/25 hover:to-white/15 hover:shadow-xl hover:scale-105 shadow-lg">
+      <div key={cityName} className={`flex flex-col items-center p-6 bg-gradient-to-br from-white/20 to-white/10 rounded-xl backdrop-blur-md border border-white/30 hover:border-white/50 transition-all duration-300 hover:bg-gradient-to-br hover:from-white/25 hover:to-white/15 hover:shadow-xl hover:scale-105 shadow-lg ${
+        isMinimized ? 'minimized-city' : ''
+      }`}>
         {/* City name prominently displayed at the top */}
         <div className="text-center mb-4">
           <div className="font-bold text-gray-900 text-xl mb-2 drop-shadow-lg">{cityName}</div>
@@ -1281,14 +1354,32 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
           <div className="text-gray-700 text-sm">{getDateForTimezone(timezone)}</div>
         </div>
         
-        {/* Remove button */}
-        <Button
-          onClick={() => removeFromSelectedCities(cityName)}
-          size="sm"
-          className="mt-2 p-2 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-full w-8 h-8 border border-red-500/30 hover:border-red-500/50 transition-all duration-200"
-        >
-          <X className="w-4 h-4" />
-        </Button>
+        {/* Control buttons */}
+        <div className="flex gap-2 mt-2">
+          {/* Minimize/Maximize button */}
+          <Button
+            onClick={() => toggleCityMinimize(cityName)}
+            size="sm"
+            className="p-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-600 rounded-full w-8 h-8 border border-blue-500/30 hover:border-blue-500/50 transition-all duration-200"
+            title={isMinimized ? "Expand" : "Minimize"}
+          >
+            {isMinimized ? (
+              <Maximize2 className="w-4 h-4" />
+            ) : (
+              <Minimize2 className="w-4 h-4" />
+            )}
+          </Button>
+          
+          {/* Remove button */}
+          <Button
+            onClick={() => removeFromSelectedCities(cityName)}
+            size="sm"
+            className="p-2 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-full w-8 h-8 border border-red-500/30 hover:border-red-500/50 transition-all duration-200"
+            title="Remove city"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
     )
   }
