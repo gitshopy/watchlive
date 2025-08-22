@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Maximize2, Minimize2, X } from "lucide-react"
+import { Maximize2, Minimize2, X, Search, Clock, Globe, Settings } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface WorldClockProps {
@@ -21,6 +21,132 @@ interface CustomTimezone {
   timezone: string
   abbreviation: string
 }
+
+// Comprehensive world timezone data
+const WORLD_TIMEZONES = [
+  // North America
+  { name: "New York", timezone: "America/New_York", country: "USA", flag: "🇺🇸" },
+  { name: "Los Angeles", timezone: "America/Los_Angeles", country: "USA", flag: "🇺🇸" },
+  { name: "Chicago", timezone: "America/Chicago", country: "USA", flag: "🇺🇸" },
+  { name: "Toronto", timezone: "America/Toronto", country: "Canada", flag: "🇨🇦" },
+  { name: "Vancouver", timezone: "America/Vancouver", country: "Canada", flag: "🇨🇦" },
+  { name: "Mexico City", timezone: "America/Mexico_City", country: "Mexico", flag: "🇲🇽" },
+  
+  // Europe
+  { name: "London", timezone: "Europe/London", country: "UK", flag: "🇬🇧" },
+  { name: "Paris", timezone: "Europe/Paris", country: "France", flag: "🇫🇷" },
+  { name: "Berlin", timezone: "Europe/Berlin", country: "Germany", flag: "🇩🇪" },
+  { name: "Rome", timezone: "Europe/Rome", country: "Italy", flag: "🇮🇹" },
+  { name: "Madrid", timezone: "Europe/Madrid", country: "Spain", flag: "🇪🇸" },
+  { name: "Amsterdam", timezone: "Europe/Amsterdam", country: "Netherlands", flag: "🇳🇱" },
+  { name: "Moscow", timezone: "Europe/Moscow", country: "Russia", flag: "🇷🇺" },
+  { name: "Vienna", timezone: "Europe/Vienna", country: "Austria", flag: "🇦🇹" },
+  { name: "Prague", timezone: "Europe/Prague", country: "Czech Republic", flag: "🇨🇿" },
+  { name: "Warsaw", timezone: "Europe/Warsaw", country: "Poland", flag: "🇵🇱" },
+  { name: "Budapest", timezone: "Europe/Budapest", country: "Hungary", flag: "🇭🇺" },
+  { name: "Bucharest", timezone: "Europe/Bucharest", country: "Romania", flag: "🇷🇴" },
+  { name: "Sofia", timezone: "Europe/Sofia", country: "Bulgaria", flag: "🇧🇬" },
+  { name: "Belgrade", timezone: "Europe/Belgrade", country: "Serbia", flag: "🇷🇸" },
+  { name: "Zagreb", timezone: "Europe/Zagreb", country: "Croatia", flag: "🇭🇷" },
+  { name: "Ljubljana", timezone: "Europe/Ljubljana", country: "Slovenia", flag: "🇸🇮" },
+  { name: "Bratislava", timezone: "Europe/Bratislava", country: "Slovakia", flag: "🇸🇰" },
+  { name: "Vilnius", timezone: "Europe/Vilnius", country: "Lithuania", flag: "🇱🇹" },
+  { name: "Riga", timezone: "Europe/Riga", country: "Latvia", flag: "🇱🇻" },
+  { name: "Tallinn", timezone: "Europe/Tallinn", country: "Estonia", flag: "🇪🇪" },
+  { name: "Helsinki", timezone: "Europe/Helsinki", country: "Finland", flag: "🇫🇮" },
+  { name: "Stockholm", timezone: "Europe/Stockholm", country: "Sweden", flag: "🇸🇪" },
+  { name: "Oslo", timezone: "Europe/Oslo", country: "Norway", flag: "🇳🇴" },
+  { name: "Copenhagen", timezone: "Europe/Copenhagen", country: "Denmark", flag: "🇩🇰" },
+  { name: "Reykjavik", timezone: "Atlantic/Reykjavik", country: "Iceland", flag: "🇮🇸" },
+  { name: "Dublin", timezone: "Europe/Dublin", country: "Ireland", flag: "🇮🇪" },
+  { name: "Edinburgh", timezone: "Europe/London", country: "Scotland", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿" },
+  { name: "Cardiff", timezone: "Europe/London", country: "Wales", flag: "🏴󠁧󠁢󠁷󠁬󠁳󠁿" },
+  { name: "Belfast", timezone: "Europe/London", country: "Northern Ireland", flag: "🏴󠁧󠁢󠁮󠁩󠁲󠁿" },
+  { name: "Brussels", timezone: "Europe/Brussels", country: "Belgium", flag: "🇧🇪" },
+  { name: "Luxembourg", timezone: "Europe/Luxembourg", country: "Luxembourg", flag: "🇱🇺" },
+  { name: "Bern", timezone: "Europe/Zurich", country: "Switzerland", flag: "🇨🇭" },
+  { name: "Zurich", timezone: "Europe/Zurich", country: "Switzerland", flag: "🇨🇭" },
+  { name: "Geneva", timezone: "Europe/Zurich", country: "Switzerland", flag: "🇨🇭" },
+  { name: "Monaco", timezone: "Europe/Monaco", country: "Monaco", flag: "🇲🇨" },
+  { name: "Vatican City", timezone: "Europe/Rome", country: "Vatican", flag: "🇻🇦" },
+  { name: "San Marino", timezone: "Europe/Rome", country: "San Marino", flag: "🇸🇲" },
+  { name: "Andorra", timezone: "Europe/Madrid", country: "Andorra", flag: "🇦🇩" },
+  { name: "Gibraltar", timezone: "Europe/Gibraltar", country: "Gibraltar", flag: "🇬🇮" },
+  { name: "Malta", timezone: "Europe/Malta", country: "Malta", flag: "🇲🇹" },
+  { name: "Cyprus", timezone: "Asia/Nicosia", country: "Cyprus", flag: "🇨🇾" },
+  { name: "Greece", timezone: "Europe/Athens", country: "Greece", flag: "🇬🇷" },
+  { name: "Albania", timezone: "Europe/Tirane", country: "Albania", flag: "🇦🇱" },
+  { name: "North Macedonia", timezone: "Europe/Skopje", country: "North Macedonia", flag: "🇲🇰" },
+  { name: "Kosovo", timezone: "Europe/Belgrade", country: "Kosovo", flag: "🇽🇰" },
+  { name: "Montenegro", timezone: "Europe/Podgorica", country: "Montenegro", flag: "🇲🇪" },
+  { name: "Bosnia", timezone: "Europe/Sarajevo", country: "Bosnia", flag: "🇧🇦" },
+  { name: "Moldova", timezone: "Europe/Chisinau", country: "Moldova", flag: "🇲🇩" },
+  { name: "Ukraine", timezone: "Europe/Kiev", country: "Ukraine", flag: "🇺🇦" },
+  { name: "Belarus", timezone: "Europe/Minsk", country: "Belarus", flag: "🇧🇾" },
+  { name: "Latvia", timezone: "Europe/Riga", country: "Latvia", flag: "🇱🇻" },
+  { name: "Estonia", timezone: "Europe/Tallinn", country: "Estonia", flag: "🇪🇪" },
+  
+  // Asia
+  { name: "Tokyo", timezone: "Asia/Tokyo", country: "Japan", flag: "🇯🇵" },
+  { name: "Beijing", timezone: "Asia/Shanghai", country: "China", flag: "🇨🇳" },
+  { name: "Seoul", timezone: "Asia/Seoul", country: "South Korea", flag: "🇰🇷" },
+  { name: "Singapore", timezone: "Asia/Singapore", country: "Singapore", flag: "🇸🇬" },
+  { name: "Dubai", timezone: "Asia/Dubai", country: "UAE", flag: "🇦🇪" },
+  { name: "Mumbai", timezone: "Asia/Kolkata", country: "India", flag: "🇮🇳" },
+  { name: "Jakarta", timezone: "Asia/Jakarta", country: "Indonesia", flag: "🇮🇩" },
+  { name: "Bangkok", timezone: "Asia/Bangkok", country: "Thailand", flag: "🇹🇭" },
+  { name: "Manila", timezone: "Asia/Manila", country: "Philippines", flag: "🇵🇭" },
+  { name: "Kuala Lumpur", timezone: "Asia/Kuala_Lumpur", country: "Malaysia", flag: "🇲🇾" },
+  { name: "Hanoi", timezone: "Asia/Ho_Chi_Minh", country: "Vietnam", flag: "🇻🇳" },
+  { name: "Phnom Penh", timezone: "Asia/Phnom_Penh", country: "Cambodia", flag: "🇰🇭" },
+  { name: "Yangon", timezone: "Asia/Yangon", country: "Myanmar", flag: "🇲🇲" },
+  { name: "Vientiane", timezone: "Asia/Vientiane", country: "Laos", flag: "🇱🇦" },
+  { name: "Dhaka", timezone: "Asia/Dhaka", country: "Bangladesh", flag: "🇧🇩" },
+  { name: "Kathmandu", timezone: "Asia/Kathmandu", country: "Nepal", flag: "🇳🇵" },
+  { name: "Colombo", timezone: "Asia/Colombo", country: "Sri Lanka", flag: "🇱🇰" },
+  { name: "Male", timezone: "Indian/Maldives", country: "Maldives", flag: "🇲🇻" },
+  { name: "Thimphu", timezone: "Asia/Thimphu", country: "Bhutan", flag: "🇧🇹" },
+  { name: "Ulaanbaatar", timezone: "Asia/Ulaanbaatar", country: "Mongolia", flag: "🇲🇳" },
+  { name: "Pyongyang", timezone: "Asia/Pyongyang", country: "North Korea", flag: "🇰🇵" },
+  { name: "Astana", timezone: "Asia/Almaty", country: "Kazakhstan", flag: "🇰🇿" },
+  { name: "Tashkent", timezone: "Asia/Tashkent", country: "Uzbekistan", flag: "🇺🇿" },
+  { name: "Bishkek", timezone: "Asia/Bishkek", country: "Kyrgyzstan", flag: "🇰🇬" },
+  { name: "Dushanbe", timezone: "Asia/Dushanbe", country: "Tajikistan", flag: "🇹🇯" },
+  { name: "Ashgabat", timezone: "Asia/Ashgabat", country: "Turkmenistan", flag: "🇹🇲" },
+  { name: "Tehran", timezone: "Asia/Tehran", country: "Iran", flag: "🇮🇷" },
+  { name: "Baghdad", timezone: "Asia/Baghdad", country: "Iraq", flag: "🇮🇶" },
+  { name: "Riyadh", timezone: "Asia/Riyadh", country: "Saudi Arabia", flag: "🇸🇦" },
+  { name: "Kuwait City", timezone: "Asia/Kuwait", country: "Kuwait", flag: "🇰🇼" },
+  { name: "Doha", timezone: "Asia/Qatar", country: "Qatar", flag: "🇶🇦" },
+  { name: "Manama", timezone: "Asia/Bahrain", country: "Bahrain", flag: "🇧🇭" },
+  { name: "Muscat", timezone: "Asia/Muscat", country: "Oman", flag: "🇴🇲" },
+  { name: "Sanaa", timezone: "Asia/Aden", country: "Yemen", flag: "🇾🇪" },
+  { name: "Amman", timezone: "Asia/Amman", country: "Jordan", flag: "🇯🇴" },
+  { name: "Beirut", timezone: "Asia/Beirut", country: "Lebanon", flag: "🇱🇧" },
+  { name: "Damascus", timezone: "Asia/Damascus", country: "Syria", flag: "🇸🇾" },
+  { name: "Jerusalem", timezone: "Asia/Jerusalem", country: "Israel", flag: "🇮🇱" },
+  { name: "Gaza", timezone: "Asia/Gaza", country: "Palestine", flag: "🇵🇸" },
+  { name: "Ankara", timezone: "Europe/Istanbul", country: "Turkey", flag: "🇹🇷" },
+  { name: "Baku", timezone: "Asia/Baku", country: "Azerbaijan", flag: "🇦🇿" },
+  { name: "Yerevan", timezone: "Asia/Yerevan", country: "Armenia", flag: "🇦🇲" },
+  { name: "Tbilisi", timezone: "Asia/Tbilisi", country: "Georgia", flag: "🇬🇪" },
+  
+  // Australia & Oceania
+  { name: "Sydney", timezone: "Australia/Sydney", country: "Australia", flag: "🇦🇺" },
+  { name: "Melbourne", timezone: "Australia/Melbourne", country: "Australia", flag: "🇦🇺" },
+  { name: "Auckland", timezone: "Pacific/Auckland", country: "New Zealand", flag: "🇳🇿" },
+  
+  // South America
+  { name: "São Paulo", timezone: "America/Sao_Paulo", country: "Brazil", flag: "🇧🇷" },
+  { name: "Buenos Aires", timezone: "America/Argentina/Buenos_Aires", country: "Argentina", flag: "🇦🇷" },
+  { name: "Lima", timezone: "America/Lima", country: "Peru", flag: "🇵🇪" },
+  
+  // Africa
+  { name: "Cairo", timezone: "Africa/Cairo", country: "Egypt", flag: "🇪🇬" },
+  { name: "Johannesburg", timezone: "Africa/Johannesburg", country: "South Africa", flag: "🇿🇦" },
+  { name: "Lagos", timezone: "Africa/Lagos", country: "Nigeria", flag: "🇳🇬" },
+  { name: "Nairobi", timezone: "Africa/Nairobi", country: "Kenya", flag: "🇰🇪" }
+]
 
 // Detect dark mode by reading the <html> class ("dark") and reacting to changes
 function useIsDarkMode() {
