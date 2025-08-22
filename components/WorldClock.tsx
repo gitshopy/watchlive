@@ -546,6 +546,47 @@ function useIsDarkMode() {
   return isDark
 }
 
+// Custom CSS for better clock styling
+const customClockStyles = `
+  .react-clock {
+    background: white;
+    border: 3px solid #e5e7eb;
+    border-radius: 50%;
+    padding: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  
+  .react-clock__face {
+    background: white;
+    border-radius: 50%;
+  }
+  
+  .react-clock__number {
+    color: #1f2937 !important;
+    font-weight: 700 !important;
+    font-size: 16px !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  
+  .react-clock__hand {
+    background: #1f2937 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  .react-clock__second-hand {
+    background: #dc2626 !important;
+    box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+  }
+  
+  .react-clock__mark {
+    background: #6b7280 !important;
+  }
+  
+  .react-clock__mark__body {
+    background: #6b7280 !important;
+  }
+`
+
 export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: WorldClockProps) {
   const isDark = useIsDarkMode()
 
@@ -564,9 +605,19 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [suggestionTime, setSuggestionTime] = useState(new Date())
+  const [currentTimeState, setCurrentTimeState] = useState(new Date())
 
   const [fullscreenTimebox, setFullscreenTimebox] = useState<string | null>(null)
   const [timeboxSize, setTimeboxSize] = useState<"normal" | "large">("normal")
+
+  // Real-time clock updates
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeState(new Date())
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [])
 
   // Initialize filtered timezones
   useEffect(() => {
@@ -755,14 +806,13 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
   // Get current time for a specific timezone
   const getTimeForTimezone = (timezone: string) => {
     try {
-      const time = new Date().toLocaleTimeString("en-US", {
+      const time = currentTimeState.toLocaleTimeString("en-US", {
         timeZone: timezone,
         hour12: true,
         hour: "numeric",
         minute: "2-digit",
         second: "2-digit"
       })
-      console.log('getTimeForTimezone:', timezone, 'result:', time)
       return time
     } catch (error) {
       console.error('Error getting time for timezone:', timezone, error)
@@ -773,13 +823,12 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
   // Get current date for a specific timezone
   const getDateForTimezone = (timezone: string) => {
     try {
-      const date = new Date().toLocaleDateString("en-US", {
+      const date = currentTimeState.toLocaleDateString("en-US", {
         timeZone: timezone,
         weekday: "short",
         month: "short",
         day: "numeric"
       })
-      console.log('getDateForTimezone:', timezone, 'result:', date)
       return date
     } catch (error) {
       console.error('Error getting date for timezone:', timezone, error)
@@ -1072,37 +1121,51 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
     const cityData = WORLD_TIMEZONES.find(tz => tz.name === cityName)
     if (!cityData) return null
 
-    const currentTime = new Date()
+    // Calculate city time based on current time state
     let cityTime
     try {
-      cityTime = new Date(currentTime.toLocaleString("en-US", { timeZone: timezone }))
+      cityTime = new Date(currentTimeState.toLocaleString("en-US", { timeZone: timezone }))
     } catch (error) {
-      cityTime = currentTime // fallback to current time
+      cityTime = currentTimeState // fallback to current time
     }
 
     return (
-      <div key={cityName} className="flex flex-col items-center p-4 bg-white/10 rounded-lg backdrop-blur-sm">
-        <div className="text-2xl mb-2">{renderFlag(cityData.country)}</div>
-        <div className="relative w-20 h-20">
+      <div key={cityName} className="flex flex-col items-center p-6 bg-gradient-to-br from-white/20 to-white/10 rounded-xl backdrop-blur-md border border-white/30 hover:border-white/50 transition-all duration-300 hover:bg-gradient-to-br hover:from-white/25 hover:to-white/15 hover:shadow-xl hover:scale-105 shadow-lg">
+        {/* City name prominently displayed at the top */}
+        <div className="text-center mb-4">
+          <div className="font-bold text-gray-900 text-xl mb-2 drop-shadow-lg">{cityName}</div>
+          <div className="text-gray-700 text-sm font-medium">{cityData.country}</div>
+        </div>
+        
+        {/* Flag above the clock */}
+        <div className="mb-4 transform hover:scale-110 transition-transform duration-200">
+          {renderFlag(cityData.country)}
+        </div>
+        
+        {/* Analog clock with numbers */}
+        <div className="relative w-28 h-28 mb-4 transform hover:scale-105 transition-transform duration-300">
           <ReactClock 
             value={cityTime}
-            size={80}
-            className="text-white"
+            size={112}
+            renderNumbers={true}
+            renderMinuteMarks={true}
+            renderHourMarks={true}
           />
         </div>
         
-        <div className="text-center mt-2">
-          <div className="font-semibold text-white text-sm">{cityName}</div>
-          <div className="text-white/70 text-xs">{getTimeForTimezone(timezone)}</div>
-          <div className="text-white/50 text-xs">{getDateForTimezone(timezone)}</div>
+        {/* Digital time and date below the clock */}
+        <div className="text-center mb-4">
+          <div className="text-gray-900 text-base font-mono font-bold mb-1">{getTimeForTimezone(timezone)}</div>
+          <div className="text-gray-700 text-sm">{getDateForTimezone(timezone)}</div>
         </div>
         
+        {/* Remove button */}
         <Button
           onClick={() => removeFromSelectedCities(cityName)}
           size="sm"
-          className="mt-2 p-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 text-xs"
+          className="mt-2 p-2 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-full w-8 h-8 border border-red-500/30 hover:border-red-500/50 transition-all duration-200"
         >
-          <X className="w-3 h-3" />
+          <X className="w-4 h-4" />
         </Button>
       </div>
     )
@@ -1110,6 +1173,9 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
 
   return (
     <div className="max-w-7xl mx-auto w-full p-4">
+      {/* Inject custom clock styles */}
+      <style dangerouslySetInnerHTML={{ __html: customClockStyles }} />
+      
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className={`text-4xl font-bold mb-2 ${themeStyles.textColor}`}>
@@ -1178,52 +1244,60 @@ export default function WorldClock({ currentTime, getGlassStyle, themeStyles }: 
         {renderTimebox(
           "current",
           "Current Time",
-          currentTime.toLocaleTimeString(),
-          currentTime.toLocaleDateString()
+          currentTimeState.toLocaleTimeString(),
+          currentTimeState.toLocaleDateString()
         )}
         {renderTimebox(
           "local",
           "Local Time",
-          currentTime.toLocaleTimeString(),
+          currentTimeState.toLocaleTimeString(),
           Intl.DateTimeFormat().resolvedOptions().timeZone
         )}
         {renderTimebox(
           "utc",
           "UTC Time",
-          currentTime.toUTCString().split(" ")[4],
+          currentTimeState.toUTCString().split(" ")[4],
           "Coordinated Universal Time"
         )}
       </div>
 
       {/* My Cities Section */}
-      <div className="mb-8 p-6" style={getGlassStyle()}>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className={`text-xl font-semibold ${themeStyles.textColor}`}>
+      <div className="mb-8 p-8" style={getGlassStyle()}>
+        <div className="flex justify-between items-center mb-8">
+          <h2 className={`text-2xl font-bold ${themeStyles.textColor} drop-shadow-lg`}>
             My Cities (Personal World Clock)
           </h2>
           <Button
             onClick={() => setShowAddTimezone(true)}
-            className={`px-4 py-2 ${themeStyles.buttonBackground} ${themeStyles.textColor}`}
+            className={`px-6 py-3 ${themeStyles.buttonBackground} ${themeStyles.textColor} hover:opacity-80 transition-all duration-200 rounded-lg font-medium shadow-lg hover:shadow-xl`}
           >
             Add City
           </Button>
         </div>
         
-
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Cities Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
           {selectedCities.map(cityName => {
             const cityData = WORLD_TIMEZONES.find(tz => tz.name === cityName)
             if (!cityData) {
               return (
                 <div key={cityName} className="flex flex-col items-center p-4 bg-red-500/10 rounded-lg border border-red-500/20">
-                  <div className="text-red-500 text-sm">City not found: {cityName}</div>
+                  <div className="text-red-500 text-sm text-center">City not found: {cityName}</div>
                 </div>
               )
             }
             return renderAnalogClock(cityName, cityData.timezone)
           })}
         </div>
+        
+        {/* Empty state when no cities */}
+        {selectedCities.length === 0 && (
+          <div className="text-center py-12">
+            <Clock className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+            <p className={`text-lg ${themeStyles.textColor} opacity-70 mb-2`}>No cities added yet</p>
+            <p className={`text-sm ${themeStyles.textColor} opacity-50`}>Click "Add City" to start building your personal world clock</p>
+          </div>
+        )}
       </div>
 
       {/* Add New City Modal */}
